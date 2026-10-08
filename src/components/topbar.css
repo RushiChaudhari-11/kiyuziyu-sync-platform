@@ -1,0 +1,56 @@
+.topbar{
+  position:fixed;
+  top:0;
+  left:0;
+
+  width:100%;
+  height:42px;
+
+  z-index:2000;
+
+  background:
+  linear-gradient(
+    90deg,
+    #d81b72,
+    #ff4d94
+  );
+
+  display:flex;
+  align-items:center;
+
+  overflow:hidden;
+}
+.topbar-marquee {
+  width: 100%;
+  overflow: hidden;
+}
+
+.topbar-track {
+  display: flex;
+  align-items: center;
+
+  width: max-content;
+
+  animation: marqueeMove 25s linear infinite;
+}
+
+.topbar-track span {
+  color: white;
+
+  font-size: 14px;
+  font-weight: 500;
+
+  margin-right: 60px;
+
+  white-space: nowrap;
+}
+
+@keyframes marqueeMove {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}

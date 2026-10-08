@@ -1,0 +1,382 @@
+:root{
+  --primary:#e73e35;
+  --primary-light:#ff6b61;
+
+  --dark:#111827;
+  --text:#374151;
+  --muted:#6b7280;
+
+  --bg:#fafafa;
+  --white:#ffffff;
+
+  --border:#e5e7eb;
+}
+
+/* =========================
+GLOBAL
+========================= */
+
+body{
+  margin:0;
+  padding:0;
+
+  font-family:
+  Inter,
+  Segoe UI,
+  sans-serif;
+
+  background:#f8fafc;
+}
+
+/* =========================
+PAGE LAYOUT
+========================= */
+
+.login-page-container{
+  display:flex;
+
+  min-height:100vh;
+
+  background:#f8fafc;
+}
+
+/* =========================
+LEFT BRAND SECTION
+========================= */
+
+.login-image-section{
+  flex:1.15;
+
+  position:relative;
+
+  overflow:hidden;
+
+  background:
+  linear-gradient(
+    rgba(0,0,0,.45),
+    rgba(0,0,0,.55)
+  ),
+  url("../assets/hero/hero8.webp");
+
+  background-size:cover;
+  background-position:center;
+
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+
+  padding:60px;
+
+  color:white;
+}
+
+.logo-img{
+  width:160px;
+
+  margin-bottom:24px;
+
+  filter:
+  drop-shadow(
+    0 12px 30px rgba(0,0,0,.3)
+  );
+}
+
+.welcome-text{
+  max-width:500px;
+
+  font-size:1.15rem;
+
+  line-height:1.8;
+
+  color:
+  rgba(255,255,255,.92);
+
+  margin:0;
+}
+
+/* =========================
+RIGHT FORM SECTION
+========================= */
+
+.login-form-section{
+  flex:.85;
+
+  display:flex;
+  justify-content:center;
+  align-items:center;
+
+  padding:40px;
+
+  background:#fafafa;
+}
+
+/* =========================
+LOGIN CARD
+========================= */
+
+.login-container{
+  width:100%;
+  max-width:500px;
+
+  background:white;
+
+  padding:42px;
+
+  border-radius:30px;
+
+  border:1px solid #f1f5f9;
+
+  box-shadow:
+  0 25px 80px rgba(0,0,0,.08);
+}
+
+/* =========================
+HEADINGS
+========================= */
+
+.login-container h1{
+  font-size:2.5rem;
+  font-weight:800;
+
+  color:var(--dark);
+
+  margin-bottom:10px;
+
+  text-align:center;
+}
+
+.login-container h2{
+  font-size:1.6rem;
+
+  color:var(--dark);
+
+  margin-bottom:24px;
+}
+
+.login-container p{
+  color:var(--muted);
+}
+
+/* =========================
+FORM
+========================= */
+
+.form-group{
+  margin-bottom:18px;
+}
+
+.form-group label{
+  display:block;
+
+  margin-bottom:8px;
+
+  font-size:.92rem;
+
+  font-weight:600;
+
+  color:var(--text);
+}
+
+.form-group input,
+.form-group select,
+.input{
+  width:100%;
+
+  height:58px;
+
+  border-radius:16px;
+
+  border:1px solid var(--border);
+
+  background:#fafafa;
+
+  padding:0 18px;
+
+  font-size:15px;
+
+  box-sizing:border-box;
+
+  transition:.25s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.input:focus{
+  outline:none;
+
+  background:white;
+
+  border-color:var(--primary);
+
+  box-shadow:
+  0 0 0 4px rgba(231,62,53,.08);
+}
+
+/* =========================
+BUTTON
+========================= */
+
+.login-button{
+  width:100%;
+
+  height:60px;
+
+  border:none;
+
+  border-radius:16px;
+
+  background:
+  linear-gradient(
+    135deg,
+    var(--primary),
+    var(--primary-light)
+  );
+
+  color:white;
+
+  font-size:15px;
+  font-weight:700;
+
+  cursor:pointer;
+
+  transition:.25s ease;
+}
+
+.login-button:hover{
+  transform:translateY(-2px);
+
+  box-shadow:
+  0 15px 35px rgba(231,62,53,.25);
+}
+
+.login-button:disabled{
+  opacity:.6;
+  cursor:not-allowed;
+}
+
+/* =========================
+MESSAGES
+========================= */
+
+.error-message{
+  padding:14px;
+
+  border-radius:14px;
+
+  background:#fff1f2;
+
+  color:#dc2626;
+
+  border:1px solid #fecdd3;
+
+  margin-bottom:20px;
+
+  text-align:center;
+}
+
+.info-message{
+  padding:14px;
+
+  border-radius:14px;
+
+  background:#ecfdf5;
+
+  color:#16a34a;
+
+  border:1px solid #bbf7d0;
+
+  margin-bottom:20px;
+
+  text-align:center;
+}
+
+/* =========================
+HINT
+========================= */
+
+.hint{
+  display:block;
+
+  margin-top:8px;
+
+  font-size:12px;
+
+  color:var(--muted);
+}
+
+.hint strong{
+  color:var(--dark);
+}
+
+/* =========================
+RECAPTCHA
+========================= */
+
+#recaptcha-container{
+  margin-top:20px;
+}
+
+/* =========================
+MOBILE
+========================= */
+
+@media(max-width:992px){
+
+  .login-page-container{
+    flex-direction:column;
+  }
+
+  .login-image-section{
+    min-height:280px;
+
+    justify-content:flex-end;
+
+    padding:32px;
+  }
+
+  .logo-img{
+    width:120px;
+  }
+
+  .welcome-text{
+    font-size:1rem;
+  }
+
+  .login-form-section{
+    padding:20px;
+  }
+
+  .login-container{
+    padding:26px;
+
+    border-radius:24px;
+  }
+
+  .login-container h1{
+    font-size:2rem;
+  }
+
+}
+
+@media(max-width:600px){
+
+  .login-image-section{
+    min-height:220px;
+    padding:24px;
+  }
+
+  .login-container{
+    padding:22px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .input{
+    height:54px;
+  }
+
+  .login-button{
+    height:56px;
+  }
+
+}

@@ -1,0 +1,982 @@
+/* =========================================================
+   SAAS USERS — PREMIUM ADMIN TABLE (ISOLATED)
+   ========================================================= */
+
+:root {
+  --su-bg: #ffffff;
+  --su-soft: #f9fafb;
+  --su-border: #e5e7eb;
+  --su-text: #111827;
+  --su-muted: #6b7280;
+
+  --su-primary: #2563eb;
+  --su-success: #16a34a;
+  --su-danger: #dc2626;
+
+  --su-radius: 14px;
+  --su-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
+/* =========================================================
+   SECTION
+   ========================================================= */
+
+.saas-users-section {
+  background: var(--su-bg);
+  padding: 28px;
+  border-radius: var(--su-radius);
+  box-shadow: var(--su-shadow);
+}
+
+.saas-users-title {
+  font-size: 1.9rem;
+  font-weight: 800;
+  margin-bottom: 18px;
+  color: var(--su-text);
+}
+
+/* =========================================================
+   ROLE METRICS
+   ========================================================= */
+
+.saas-users-role-metrics {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.saas-users-metric {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  background: var(--su-soft);
+  border: 1px solid var(--su-border);
+}
+
+.saas-users-metric--wholesaler {
+  color: #0f766e;
+}
+
+.saas-users-metric--retailer {
+  color: #be185d;
+}
+
+/* =========================================================
+   SEARCH & SORT
+   ========================================================= */
+
+.saas-users-search-bar,
+.saas-users-sort-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.saas-users-search-select,
+.saas-users-sort-select,
+.saas-users-search-input {
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--su-border);
+  background: #fff;
+  font-size: 0.95rem;
+}
+
+.saas-users-search-input {
+  flex: 1;
+  min-width: 260px;
+}
+
+.saas-users-sort-toggle {
+  padding: 11px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--su-border);
+  background: var(--su-soft);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.saas-users-sort-toggle:hover {
+  background: #eef2ff;
+}
+
+/* =========================================================
+   STATES
+   ========================================================= */
+
+.saas-users-loading,
+.saas-users-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--su-muted);
+  font-weight: 600;
+}
+
+/* =========================================================
+   TABLE
+   ========================================================= */
+
+.saas-users-table-wrapper {
+  border: 1px solid var(--su-border);
+  border-radius: var(--su-radius);
+  overflow: hidden;
+}
+
+/* HEADER */
+.saas-users-table-header {
+  display: grid;
+  grid-template-columns:
+    1.4fr
+    1fr
+    1.2fr
+    2fr
+    1fr
+    0.8fr
+    1.3fr
+    1.2fr
+    1fr
+    1fr
+    1.8fr;
+  padding: 14px 18px;
+  background: var(--su-soft);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--su-border);
+  color: #374151;
+}
+
+/* BODY */
+.saas-users-table-body {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ROW */
+.saas-users-row {
+  display: grid;
+  grid-template-columns:
+    1.4fr
+    1fr
+    1.2fr
+    2fr
+    1fr
+    0.8fr
+    1.3fr
+    1.2fr
+    1fr
+    1fr
+    1.8fr;
+  padding: 16px 18px;
+  align-items: center;
+  border-bottom: 1px solid var(--su-border);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.saas-users-row:hover {
+  background: #f8fafc;
+}
+
+.saas-users-row:last-child {
+  border-bottom: none;
+}
+
+/* =========================================================
+   CELLS
+   ========================================================= */
+
+.saas-users-cell {
+  font-size: 0.95rem;
+  color: var(--su-text);
+  min-width: 0;
+}
+
+.saas-users-name {
+  font-weight: 700;
+}
+
+.saas-users-muted {
+  color: var(--su-muted);
+}
+
+.saas-users-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.saas-users-center {
+  text-align: center;
+}
+
+.saas-users-amount {
+  font-weight: 800;
+  color: #14532d;
+}
+
+.saas-users-profit {
+  font-weight: 800;
+}
+
+.saas-profit {
+  color: var(--su-success);
+}
+
+.saas-loss {
+  color: var(--su-danger);
+}
+
+/* =========================================================
+   ROLE BADGE
+   ========================================================= */
+
+.saas-role {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.saas-role--retailer {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.saas-role--wholesaler {
+  background: #ecfeff;
+  color: #0f766e;
+}
+
+/* =========================================================
+   ACTION BUTTONS
+   ========================================================= */
+
+.saas-users-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.saas-btn {
+  padding: 7px 12px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.saas-btn--primary {
+  background: var(--su-success);
+  color: #fff;
+}
+
+.saas-btn--info {
+  background: var(--su-primary);
+  color: #fff;
+}
+
+.saas-btn--danger {
+  background: var(--su-danger);
+  color: #fff;
+}
+
+.saas-btn:hover {
+  opacity: 0.9;
+}
+
+/* =========================================================
+   MOBILE — CARD LAYOUT
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .saas-users-table-header {
+    display: none;
+  }
+
+  .saas-users-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 14px;
+    border-radius: 16px;
+    box-shadow: var(--su-shadow);
+  }
+
+  .saas-users-cell {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .saas-users-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+/* ================================
+   🧾 OFFLINE CUSTOMER FORM
+   ================================ */
+
+.offline-customer-form {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  background-color: #fafafa;
+}
+
+.offline-customer-form h4 {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Grid layout for inputs */
+.offline-customer-form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* Make full-width fields */
+.offline-customer-form input:nth-child(2),
+.offline-customer-form input:nth-child(3) {
+  grid-column: span 2;
+}
+
+/* Inputs */
+.offline-customer-form input {
+  padding: 10px 12px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background-color: #fff;
+}
+
+/* Focus state */
+.offline-customer-form input:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+}
+
+/* Placeholder */
+.offline-customer-form input::placeholder {
+  color: #999;
+}
+
+/* ================================
+   📱 RESPONSIVE
+   ================================ */
+@media (max-width: 768px) {
+  .offline-customer-form {
+    grid-template-columns: 1fr;
+  }
+
+  .offline-customer-form input {
+    grid-column: span 1 !important;
+  }
+}
+/* ================================
+   🧮 GST SECTION
+   ================================ */
+
+.gst-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #ddd;
+}
+
+.gst-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.gst-amount {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #444;
+}
+.finalize-sale-btn {
+  margin-top: 16px;
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  background-color: #28a745;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.finalize-sale-btn:hover {
+  background-color: #218838;
+}
+
+.finalize-sale-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+/* =====================================================
+   🧾 INVOICE BASE (HIDDEN ON SCREEN)
+   ===================================================== */
+/* =====================================================
+   🧾 INVOICE BASE (HIDDEN ON SCREEN)
+   ===================================================== */
+
+.invoice-print {
+  display: none;
+}
+
+/* =====================================================
+   🖨 PRINT MODE
+   ===================================================== */
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .invoice-print,
+  .invoice-print * {
+    visibility: visible !important;
+  }
+
+  .invoice-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: block;
+    background: #fff;
+  }
+
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+}
+
+/* =====================================================
+   📄 INVOICE CONTAINER
+   ===================================================== */
+
+.invoice-container {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 15mm;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  color: #000;
+  box-sizing: border-box;
+}
+
+/* =====================================================
+   🏪 HEADER (CENTER)
+   ===================================================== */
+
+.invoice-header {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.invoice-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.invoice-header p {
+  margin: 1px 0;
+  font-size: 11px;
+}
+
+/* =====================================================
+   📄 INVOICE + CUSTOMER INFO (LEFT / TOP)
+   ===================================================== */
+
+.invoice-top-info {
+  margin-top: 6px;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+
+.invoice-top-info p {
+  margin: 2px 0;
+}
+
+/* =====================================================
+   📦 PRODUCT TABLE (BELOW INFO)
+   ===================================================== */
+
+.invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  margin-bottom: 10px;
+}
+
+.invoice-table th,
+.invoice-table td {
+  border: 1px solid #000;
+  padding: 4px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.invoice-table th {
+  background-color: #f0f0f0;
+  font-weight: bold;
+}
+
+.invoice-table td:nth-child(2) {
+  text-align: left;
+}
+
+/* =====================================================
+   💰 TOTALS (RIGHT SIDE)
+   ===================================================== */
+
+.invoice-summary {
+  width: 40%;
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.invoice-summary div {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.invoice-summary .net-total {
+  border-top: 1px solid #000;
+  padding-top: 4px;
+  font-weight: bold;
+}
+
+/* =====================================================
+   🔤 AMOUNT IN WORDS
+   ===================================================== */
+
+.amount-words {
+  margin-top: 8px;
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* =====================================================
+   📜 FOOTER (LEFT + SIGNATURE RIGHT)
+   ===================================================== */
+
+.invoice-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+  font-size: 11px;
+}
+
+.invoice-footer p {
+  margin: 2px 0;
+}
+
+/* =====================================================
+   ✍ SIGNATURE
+   ===================================================== */
+
+.signature {
+  text-align: center;
+}
+
+.signature-line {
+  margin-top: 22px;
+  border-top: 1px solid #000;
+  width: 160px;
+  padding-top: 4px;
+}
+
+
+
+/* =====================================================
+   🔁 PRINT BUTTON (SCREEN ONLY)
+   ===================================================== */
+
+.print-invoice-btn {
+  margin-top: 12px;
+  padding: 10px;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.print-invoice-btn:hover {
+  background-color: #0056b3;
+}
+
+@media print {
+  .print-invoice-btn {
+    display: none !important;
+  }
+}
+.whatsapp-invoice-btn {
+  margin-top: 12px;
+  padding: 12px;
+  width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  background-color: #25D366;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.whatsapp-invoice-btn:hover {
+  background-color: #1ebc5a;
+}
+
+@media print {
+  .whatsapp-invoice-btn {
+    display: none !important;
+  }
+}
+.whatsapp-checkbox {
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.whatsapp-checkbox input {
+  margin-right: 8px;
+  transform: scale(1.1);
+  cursor: pointer;
+}
+
+.whatsapp-checkbox label {
+  cursor: pointer;
+  font-weight: 500;
+}
+.whatsapp-checkbox {
+  margin: 10px 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.whatsapp-checkbox input {
+  margin-right: 8px;
+  transform: scale(1.1);
+  cursor: pointer;
+}
+.saas-users-export-bar {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.saas-btn--secondary {
+  background: #f5f7fa;
+  border: 1px solid #d6dde6;
+  color: #0e1724;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.saas-btn--secondary:hover {
+  background: #e9eef4;
+}
+/* ===== Modal Backdrop ===== */
+/* ===== Modal ===== */
+.camera-scanner-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===== Container ===== */
+.scanner-container {
+  background: #000;
+  padding: 14px;
+  border-radius: 14px;
+  width: 360px;
+  box-shadow: 0 0 25px rgba(0,0,0,0.6);
+}
+
+/* ===== Camera Wrapper ===== */
+.camera-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Camera video */
+#camera-scanner video {
+  width: 100%;
+  border-radius: 10px;
+}
+
+/* ===== Rectangle Overlay ===== */
+.scanner-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 88%;
+  height: 26%;   /* shorter = barcode focus */
+  transform: translate(-50%, -50%);
+  border: 2px solid #ff2a2a;
+  border-radius: 6px;
+  box-shadow: 0 0 10px rgba(255,0,0,0.7);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+
+/* ===== Laser Line ===== */
+.laser-line {
+  position: absolute;
+  width: 100%;
+  height: 1.5px;   /* thinner */
+  background: linear-gradient(
+    to right,
+    transparent,
+    red,
+    transparent
+  );
+  box-shadow: 0 0 6px red;
+  animation: laserMove 1.8s linear infinite;
+}
+
+
+/* Laser animation */
+@keyframes laserMove {
+  0%   { top: 0%; }
+  50%  { top: 96%; }
+  100% { top: 0%; }
+}
+
+/* ===== Close Button ===== */
+.close-scanner-btn {
+  margin-top: 14px;
+  width: 100%;
+  padding: 10px;
+  background: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+/* Hide default QR frame */
+#camera-scanner__scan_region img,
+#camera-scanner__scan_region canvas {
+  display: none !important;
+}
+
+#camera-scanner__dashboard_section {
+  display: none !important;
+}
+.camera-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1;
+}
+
+/* Cut out scan zone */
+.scanner-overlay {
+  z-index: 2;
+}
+/* ===============================
+   SCAN POPUP OVERLAY
+=============================== */
+.scan-popup {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 99999;
+  animation: slideIn 0.3s ease;
+}
+
+/* Popup Box */
+.scan-popup-content {
+  background: #111;
+  color: #fff;
+  padding: 14px 18px;
+  border-radius: 10px;
+  min-width: 220px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+  text-align: left;
+}
+
+/* Success text */
+.scan-success {
+  font-size: 13px;
+  color: #22c55e;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* Product name */
+.scan-product-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+/* Code */
+.scan-product-code {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Slide animation */
+@keyframes slideIn {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+/* ===============================
+   VARIANT MODAL BACKDROP
+================================ */
+.variant-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+/* ===============================
+   VARIANT MODAL CONTAINER
+================================ */
+.variant-modal {
+  background: #ffffff;
+  width: 420px;
+  max-width: 95%;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.25s ease-out;
+}
+
+/* ===============================
+   TITLE
+================================ */
+.variant-modal h3 {
+  margin-bottom: 18px;
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+  color: #222;
+}
+
+/* ===============================
+   VARIANT BUTTONS
+================================ */
+.variant-modal button {
+  width: 100%;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  border: 1px solid #e5e5e5;
+  background: #f8f9fa;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.variant-modal button:hover:not(:disabled) {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+  transform: translateY(-2px);
+}
+
+.variant-modal button:disabled {
+  background: #f1f1f1;
+  color: #aaa;
+  cursor: not-allowed;
+  border-color: #eee;
+}
+
+/* ===============================
+   CANCEL BUTTON (Last Button)
+================================ */
+.variant-modal button:last-child {
+  background: #fff;
+  border: 1px solid #ddd;
+  font-weight: 600;
+}
+
+.variant-modal button:last-child:hover {
+  background: #ff4d4f;
+  color: #fff;
+  border-color: #ff4d4f;
+}
+
+/* ===============================
+   ANIMATIONS
+================================ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ===============================
+   MOBILE OPTIMIZATION
+================================ */
+@media (max-width: 480px) {
+  .variant-modal {
+    padding: 18px;
+    border-radius: 12px;
+  }
+
+  .variant-modal button {
+    padding: 12px;
+    font-size: 14px;
+  }
+}

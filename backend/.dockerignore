@@ -1,0 +1,38 @@
+# Version control
+.git
+.gitignore
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.swp
+*.iml
+.DS_Store
+
+# Build output & local artifacts
+target/
+*.jar
+*.war
+
+# Logs
+*.log
+logs/
+
+# Credentials, secrets, and local environment files (STRICT SECURITY)
+downloads/
+*.json
+.env
+.env.*
+application-local.yml
+*.pem
+*.key
+*.p12
+
+# Firebase & service-account credential files
+*service-account*.json
+*serviceaccount*.json
+*firebase*.json
+*credentials*.json
+*secret*.json
+client*.json
+google-services.json

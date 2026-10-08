@@ -1,0 +1,325 @@
+/* ===============================
+   CollectionCard.css
+   Premium Image Card Layout
+================================ */
+
+:root{
+  --accent:#e73e35;
+  --accent-light:#ff8c82;
+  --text-dark:#0e1724;
+  --card-radius:14px;
+  --ease:cubic-bezier(.2,.9,.2,1);
+}
+
+/* ================= SECTION ================= */
+
+.collection-section-title{
+font-size:28px;
+font-weight:700;
+margin-bottom:24px;
+color:var(--text-dark);
+letter-spacing:-0.3px;
+}
+
+/* ================= GRID ================= */
+
+.collection-grid{
+
+display:grid;
+
+grid-template-columns:repeat(4,1fr);
+
+gap:24px;
+
+width:100%;
+
+padding:4px 0;
+
+align-items:start;
+
+box-sizing:border-box;
+
+}
+
+/* responsive */
+
+@media(max-width:1024px){
+.collection-grid{
+grid-template-columns:repeat(3,1fr);
+gap:20px;
+}
+}
+
+@media(max-width:768px){
+.collection-grid{
+grid-template-columns:repeat(2,1fr);
+gap:18px;
+}
+}
+
+@media(max-width:420px){
+.collection-grid{
+grid-template-columns:repeat(2,1fr);
+gap:14px;
+}
+}
+
+/* ================= CARD ================= */
+
+.collection-card{
+
+position:relative;
+
+width:100%;
+
+aspect-ratio:4/5;
+
+border-radius:var(--card-radius);
+
+overflow:hidden;
+
+cursor:pointer;
+
+background:transparent;
+
+transition:transform .35s var(--ease), box-shadow .35s var(--ease);
+
+box-sizing:border-box;
+
+}
+
+/* Tablet */
+
+@media(max-width:1024px){
+
+.collection-card{
+aspect-ratio:4/4.8;
+}
+
+}
+
+/* Mobile */
+
+@media(max-width:768px){
+
+.collection-card{
+aspect-ratio:1/1.15;
+}
+
+}
+
+/* Small Mobile */
+
+@media(max-width:420px){
+
+.collection-card{
+aspect-ratio:1/1.05;
+}
+
+}
+
+.collection-card:hover{
+transform:translateY(-6px);
+}
+
+/* ================= MEDIA ================= */
+
+.collection-card-media{
+
+position:relative;
+
+width:100%;
+height:100%;
+
+overflow:hidden;
+
+border-radius:var(--card-radius);
+
+}
+
+/* ================= IMAGE ================= */
+
+.collection-image{
+
+position:absolute;
+
+inset:0;
+
+width:100%;
+height:100%;
+
+object-fit:cover;
+
+opacity:0;
+
+transition:opacity .8s ease, transform 1.2s var(--ease);
+
+}
+
+.collection-image.active{
+opacity:1;
+}
+
+/* hover zoom */
+
+.collection-card:hover .collection-image{
+transform:scale(1.08);
+}
+
+/* ================= GRADIENT OVERLAY ================= */
+
+.collection-card-media::after{
+
+content:"";
+
+position:absolute;
+
+left:0;
+bottom:0;
+
+width:100%;
+height:50%;
+
+background:linear-gradient(
+180deg,
+rgba(0,0,0,0) 0%,
+rgba(0,0,0,0.35) 100%
+);
+
+z-index:2;
+
+}
+
+/* ================= BOTTOM OVERLAY ================= */
+
+.bottom-overlay{
+
+position:absolute;
+
+bottom:14px;
+left:14px;
+right:14px;
+
+display:flex;
+
+justify-content:space-between;
+
+align-items:center;
+
+z-index:3;
+
+}
+
+/* ================= TITLE PILL ================= */
+
+.product-pill{
+
+padding:8px 14px;
+
+border-radius:999px;
+
+background:rgba(255,255,255,0.92);
+
+color:var(--text-dark);
+
+font-weight:700;
+
+font-size:.9rem;
+
+backdrop-filter:blur(6px);
+
+white-space:nowrap;
+
+}
+
+/* ================= EXPLORE BUTTON ================= */
+
+.btn-pill{
+
+display:flex;
+
+align-items:center;
+
+gap:6px;
+
+padding:8px 14px;
+
+border-radius:999px;
+
+background:linear-gradient(90deg,var(--accent),var(--accent-light));
+
+color:#fff;
+
+font-weight:700;
+
+font-size:.9rem;
+
+border:none;
+
+cursor:pointer;
+
+transition:transform .25s ease, box-shadow .25s ease;
+
+}
+
+.btn-pill:hover{
+transform:translateY(-2px);
+box-shadow:0 8px 20px rgba(0,0,0,0.15);
+}
+
+/* ================= ARROW ================= */
+
+.arrow{
+transition:transform .25s ease;
+}
+
+.btn-pill:hover .arrow{
+transform:translateX(4px);
+}
+
+/* ================= ADMIN BUTTONS ================= */
+
+.collection-admin-actions{
+
+position:absolute;
+
+top:10px;
+left:10px;
+
+display:flex;
+
+gap:8px;
+
+z-index:20;
+
+}
+
+.collection-admin-actions button{
+
+padding:6px 10px;
+
+border-radius:8px;
+
+border:none;
+
+font-size:.8rem;
+
+font-weight:600;
+
+cursor:pointer;
+
+background:#fff;
+
+box-shadow:0 4px 12px rgba(0,0,0,.15);
+
+transition:transform .2s ease, box-shadow .2s ease;
+
+}
+
+.collection-admin-actions button:hover{
+
+transform:translateY(-2px);
+
+box-shadow:0 6px 16px rgba(0,0,0,.2);
+
+}

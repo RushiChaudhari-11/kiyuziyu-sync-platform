@@ -1,0 +1,80 @@
+.admin-leads-wrapper {
+  padding: 40px;
+  background: linear-gradient(135deg, #f8fafc, #eef2f7);
+  min-height: 100vh;
+}
+
+/* HEADER */
+.admin-header {
+  margin-bottom: 30px;
+}
+
+.admin-header h1 {
+  font-size: 32px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.admin-header p {
+  color: #777;
+}
+
+/* TAB SWITCHER */
+.admin-tabs {
+  position: relative;
+  display: flex;
+  width: fit-content;
+  background: rgba(231, 62, 53, 0.08);
+  padding: 6px;
+  border-radius: 999px;
+  margin-bottom: 30px;
+}
+
+/* Sliding indicator */
+.tab-indicator {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: calc(50% - 6px);
+  height: calc(100% - 12px);
+  background: linear-gradient(135deg, #e73e35, #ff8c82);
+  border-radius: 999px;
+  transition: transform 0.35s ease;
+  z-index: 0;
+}
+
+.tab-indicator.right {
+  transform: translateX(100%);
+}
+
+/* Buttons */
+.admin-tabs button {
+  position: relative;
+  z-index: 1;
+  padding: 10px 30px;
+  border: none;
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+  color: #e73e35;
+  border-radius: 999px;
+}
+
+.admin-tabs button.active {
+  color: white;
+}
+
+.admin-content {
+  animation: fadeSwitch 0.35s ease;
+}
+
+@keyframes fadeSwitch {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,0 +1,195 @@
+.store-cart-container{
+max-width:1000px;
+margin:auto;
+padding:30px 20px;
+}
+
+.store-cart-title{
+font-size:28px;
+font-weight:700;
+margin-bottom:25px;
+color:#2c3e50;
+}
+
+/* CART LIST */
+
+.cart-list{
+display:flex;
+flex-direction:column;
+gap:18px;
+}
+
+/* CART ITEM */
+
+.cart-item{
+display:flex;
+align-items:center;
+justify-content:space-between;
+
+padding:16px;
+
+border-radius:12px;
+border:1px solid #eee;
+
+background:#fff;
+
+box-shadow:0 4px 10px rgba(0,0,0,0.05);
+
+transition:all 0.2s ease;
+}
+
+.cart-item:hover{
+transform:translateY(-2px);
+}
+
+/* IMAGE */
+
+.cart-image img{
+width:80px;
+height:80px;
+object-fit:cover;
+border-radius:8px;
+}
+
+/* INFO */
+
+.cart-item-info{
+flex:1;
+margin-left:15px;
+display:flex;
+flex-direction:column;
+}
+
+.cart-product-name{
+font-weight:600;
+font-size:16px;
+color:#333;
+}
+
+.cart-product-code{
+font-size:12px;
+color:#888;
+margin-top:3px;
+}
+
+.cart-product-price{
+font-size:14px;
+color:#555;
+margin-top:6px;
+}
+
+.cart-subtotal{
+font-size:14px;
+font-weight:600;
+margin-top:5px;
+color:#2c3e50;
+}
+
+/* QTY */
+
+.cart-qty-controls{
+display:flex;
+align-items:center;
+gap:10px;
+}
+
+.cart-qty-btn{
+width:34px;
+height:34px;
+
+border-radius:6px;
+border:none;
+
+background:#2ecc71;
+color:white;
+
+font-size:18px;
+font-weight:bold;
+
+cursor:pointer;
+
+transition:all 0.2s;
+}
+
+.cart-qty-btn:hover{
+background:#27ae60;
+}
+
+.cart-qty-number{
+min-width:20px;
+text-align:center;
+font-weight:600;
+}
+
+/* SUMMARY */
+
+.cart-summary{
+margin-top:35px;
+
+display:flex;
+justify-content:space-between;
+align-items:center;
+
+padding-top:20px;
+
+border-top:2px solid #eee;
+}
+
+.cart-total{
+font-size:22px;
+font-weight:700;
+color:#2c3e50;
+}
+
+.checkout-btn{
+
+padding:14px 24px;
+
+border:none;
+border-radius:10px;
+
+background:#2ecc71;
+color:white;
+
+font-size:16px;
+font-weight:600;
+
+cursor:pointer;
+
+transition:all 0.2s;
+}
+
+.checkout-btn:hover{
+background:#27ae60;
+}
+
+/* EMPTY */
+
+.cart-empty{
+text-align:center;
+padding:60px 20px;
+font-size:18px;
+color:#888;
+}
+
+/* MOBILE */
+
+@media(max-width:700px){
+
+.cart-item{
+flex-direction:column;
+align-items:flex-start;
+gap:12px;
+}
+
+.cart-summary{
+flex-direction:column;
+gap:15px;
+align-items:flex-start;
+}
+
+.checkout-btn{
+width:100%;
+}
+
+}

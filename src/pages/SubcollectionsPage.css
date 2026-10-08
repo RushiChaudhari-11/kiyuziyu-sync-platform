@@ -1,0 +1,125 @@
+/* src/pages/SubcollectionsPage.css */
+
+.subcollections-page-container {
+  padding: 40px 20px;
+  max-width: 1200px;
+  margin: 20px auto;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  min-height: 60vh; /* Ensure some height for loading states */
+}
+
+.page-title {
+  text-align: center;
+  margin-bottom: 30px;
+  color: #333;
+  font-size: 2.2em;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 15px;
+}
+
+.no-subcollections-message,
+.error-message {
+  text-align: center;
+  font-size: 1.1em;
+  color: #666;
+  padding: 40px;
+}
+
+.error-message {
+  color: #dc3545; /* Red for errors */
+  font-weight: bold;
+}
+
+.subcollections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 25px;
+  padding: 20px 0;
+}
+
+.subcollections-grid a {
+  text-decoration: none; /* Remove underline from links */
+  color: inherit; /* Inherit text color */
+}
+
+/* New and Updated Styles for the Card */
+.collection-card {
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.collection-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.collection-image-container {
+  width: 100%;
+  aspect-ratio: 1 / 1; /* This makes the container a perfect square */
+  overflow: hidden;
+  border-bottom: 1px solid #e0e0e0;
+  background-color: #f8f8f8;
+  transition: background-color 0.3s ease;
+}
+
+.collection-image-container:hover {
+  background-color: #eee;
+}
+
+.collection-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* This makes the image fill the container */
+  transition: transform 0.3s ease-in-out;
+}
+
+.collection-image-container:hover .collection-image {
+  transform: scale(1.1); /* Adds a nice zoom effect on hover */
+}
+
+.collection-info {
+  padding: 20px;
+}
+
+.collection-info .title {
+  font-size: 1.2em;
+  font-weight: 600;
+  color: #4a90e2;
+  margin-bottom: 5px;
+}
+
+.collection-info .description {
+  font-size: 0.9em;
+  color: #777;
+  margin-bottom: 10px;
+}
+
+.collection-info .price {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: #e74c3c;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .subcollections-page-container {
+    padding: 20px 10px;
+    margin: 10px auto;
+  }
+  .page-title {
+    font-size: 1.8em;
+  }
+}
+
+@media (max-width: 480px) {
+  .subcollections-grid {
+    grid-template-columns: 1fr; /* Stack cards on very small screens */
+  }
+}

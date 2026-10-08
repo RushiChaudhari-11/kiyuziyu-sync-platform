@@ -1,0 +1,67 @@
+/* ---------- INSTAGRAM REELS SECTION ---------- */
+.reels-section {
+  position: relative;
+  padding: 90px 0 110px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 245, 245, 0.35),
+    rgba(255, 255, 255, 1)
+  );
+  overflow: hidden;
+}
+
+/* soft luxury glow */
+.reels-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    60% 40% at 50% 18%,
+    rgba(231, 62, 53, 0.08),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+/* ---------- HEADER WRAPPER (NEW) ---------- */
+.reels-header-wrapper {
+  max-width: 820px;            /* 🔥 optical centering */
+  margin: 0 auto 54px;         /* controls distance from carousel */
+  padding: 0 20px;
+  text-align: center;
+}
+
+/* ---------- HEADER ---------- */
+.reels-header h2 {
+  font-size: clamp(1.9rem, 2.6vw, 2.5rem);
+  font-weight: 800;
+  color: #0e1724;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.reels-header p {
+  margin-top: 8px;             /* 🔥 tighter spacing */
+  font-size: 1.02rem;
+  color: #5f6f82;              /* slightly darker for clarity */
+  font-weight: 500;
+}
+
+/* ---------- MOBILE ---------- */
+@media (max-width: 768px) {
+  .reels-section {
+    padding: 60px 0 80px;
+  }
+
+  .reels-header-wrapper {
+    margin-bottom: 40px;
+  }
+
+  .reels-header h2 {
+    font-size: 1.65rem;
+  }
+
+  .reels-header p {
+    font-size: 0.95rem;
+  }
+}

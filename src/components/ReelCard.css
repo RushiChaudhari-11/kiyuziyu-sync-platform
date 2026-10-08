@@ -1,0 +1,95 @@
+/* ---------- REEL CARD ---------- */
+.reel-card {
+  position: relative;
+  width: 280px;
+  height: 440px;
+  border-radius: 26px;
+  overflow: hidden;
+  background: #000;
+
+  /* 🔥 NO SHADOW BY DEFAULT */
+  box-shadow: none;
+
+  cursor: default;
+
+  /* GPU ISOLATION */
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+/* ---------- ACTIVE (CENTER) CARD ---------- */
+.reel-card.active {
+  cursor: pointer;
+
+  /* 🔥 SHADOW ONLY ON CENTER CARD */
+  box-shadow: 0 32px 64px rgba(0,0,0,0.32);
+}
+
+/* ---------- VIDEO ---------- */
+.reel-card video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+
+  /* prevent flicker */
+  backface-visibility: hidden;
+}
+
+/* ---------- GRADIENT OVERLAY ---------- */
+.reel-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0,0,0,0) 55%,
+    rgba(0,0,0,0.55) 100%
+  );
+
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+/* show gradient ONLY for active */
+.reel-card.active::after {
+  opacity: 1;
+}
+
+/* ---------- CAPTION ---------- */
+.reel-caption {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  color: #ffffff;
+  z-index: 2;
+
+  animation: fadeUp 0.35s ease;
+}
+
+.reel-caption p {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-bottom: 6px;
+}
+
+.reel-instagram {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+}
+
+/* ---------- ANIMATION ---------- */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

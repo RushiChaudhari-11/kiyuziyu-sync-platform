@@ -1,0 +1,231 @@
+/* ================= WRAPPER ================= */
+
+.bulk-admin-wrapper {
+  padding: 50px;
+  background: linear-gradient(135deg, #f8fafc, #eef2f7);
+  min-height: 100vh;
+}
+
+/* ================= KPI SECTION ================= */
+
+.bulk-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.stat-card {
+  flex: 1;
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.05);
+  transition: all 0.25s ease;
+  cursor: pointer;
+  border-left: 4px solid transparent;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
+}
+
+.stat-card.active {
+  border-left: 4px solid #e73e35;
+  box-shadow: 0 16px 40px rgba(231, 62, 53, 0.15);
+}
+
+.stat-card h4 {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-card h2 {
+  font-size: 32px;
+  font-weight: 800;
+  color: #222;
+}
+
+/* ================= HEADER ================= */
+
+.bulk-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.bulk-table-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #222;
+}
+
+.bulk-controls {
+  display: flex;
+  gap: 14px;
+}
+
+.bulk-controls input,
+.bulk-controls select {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e5ea;
+  font-size: 14px;
+  background: white;
+  transition: 0.2s ease;
+}
+
+.bulk-controls input:focus,
+.bulk-controls select:focus {
+  outline: none;
+  border-color: #e73e35;
+  box-shadow: 0 0 0 3px rgba(231, 62, 53, 0.1);
+}
+
+/* ================= TABLE ================= */
+
+.bulk-table-scroll {
+  overflow-x: auto;
+}
+
+.bulk-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 14px; /* creates row spacing */
+}
+
+/* HEADER ROW */
+
+.bulk-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.bulk-table thead tr {
+  background: #f1f3f6;
+}
+
+.bulk-table th {
+  padding: 16px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bulk-table th:first-child {
+  border-top-left-radius: 14px;
+  border-bottom-left-radius: 14px;
+}
+
+.bulk-table th:last-child {
+  border-top-right-radius: 14px;
+  border-bottom-right-radius: 14px;
+}
+
+/* BODY ROWS AS CARDS */
+
+.bulk-table tbody tr {
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.04);
+  transition: all 0.25s ease;
+}
+
+.bulk-table tbody tr:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.bulk-table td {
+  padding: 16px 18px;
+  font-size: 14px;
+  color: #333;
+}
+
+.bulk-table td:first-child {
+  border-top-left-radius: 14px;
+  border-bottom-left-radius: 14px;
+}
+
+.bulk-table td:last-child {
+  border-top-right-radius: 14px;
+  border-bottom-right-radius: 14px;
+}
+
+/* ================= STATUS DROPDOWN ================= */
+
+.status-dropdown {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+}
+
+/* New */
+.status-dropdown.new {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+/* Contacted */
+.status-dropdown.contacted {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+/* Closed */
+.status-dropdown.closed {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+/* ================= IMAGE ================= */
+
+.table-image {
+  width: 55px;
+  height: 55px;
+  object-fit: cover;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.table-image:hover {
+  transform: scale(1.05);
+}
+
+/* ================= NO DATA ================= */
+
+.no-data {
+  text-align: center;
+  padding: 30px;
+  color: #888;
+}
+
+/* ================= MODAL ================= */
+
+.image-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.image-modal img {
+  max-width: 80%;
+  max-height: 80%;
+  border-radius: 16px;
+}

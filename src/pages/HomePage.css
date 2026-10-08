@@ -1,0 +1,445 @@
+/* -----------------------------------------
+   HomePage.css — Light Premium (brand red)
+   Brand accent: --gold: #e73e35
+------------------------------------------ */
+
+:root {
+  /* Brand red from your logo */
+  --gold: #e73e35;        /* primary brand red */
+  --gold-light: #ff8c82;  /* softer gradient end */
+
+  /* Light luxury palette */
+  --bg-1: #fbfdff;
+  --bg-2: #f3f8ff;
+  --text: #1a1a1a;
+  --muted: #6c7a8a;
+  --card-shadow: rgba(14, 23, 36, 0.06);
+  --card-border: rgba(14, 23, 36, 0.03);
+  --ease: cubic-bezier(.2, .9, .2, 1);
+}
+
+/* ---------------------------
+   FEATURED COLLECTIONS
+---------------------------- */
+.collections-section {
+  position: relative;
+  padding: 5.5rem 2rem;
+  background: linear-gradient(135deg, var(--bg-1), var(--bg-2));
+  background-size: 200% 200%;
+  animation: bgShift 26s ease-in-out infinite alternate;
+  border-radius: 20px;
+  overflow: hidden;
+  text-align: center;
+  box-shadow: 0 10px 36px var(--card-shadow);
+}
+
+@keyframes bgShift {
+  0% { background-position: 0% 50%; filter: brightness(1); }
+  50% { background-position: 100% 50%; filter: brightness(1.03); }
+  100% { background-position: 0% 50%; filter: brightness(1); }
+}
+
+/* gentle ambient wash using brand red tint but very subtle */
+.collections-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(231,62,53,0.03), transparent 35%),
+    radial-gradient(circle at 80% 80%, rgba(255,140,130,0.02), transparent 45%),
+    linear-gradient(180deg, rgba(255,255,255,0.0), rgba(255,255,255,0));
+  z-index: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  animation: ambientWash 28s ease-in-out infinite alternate;
+}
+@keyframes ambientWash {
+  0% { transform: translateY(0) scale(1); opacity: 0.55; }
+  50% { transform: translateY(-0.8%) scale(1.02); opacity: 0.78; }
+  100% { transform: translateY(0) scale(1); opacity: 0.55; }
+}
+
+/* subtle sparkle layer (soft, light) */
+.sparkle-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 1;
+  pointer-events: none;
+}
+/* ===============================
+   COLLECTION LOADING SKELETON
+================================ */
+
+.collection-loading-card{
+  position:relative;
+
+  width:100%;
+
+  aspect-ratio:4/5;
+
+  border-radius:14px;
+
+  overflow:hidden;
+
+  background:#eeeeee;
+
+  box-sizing:border-box;
+}
+
+
+.collection-loading-image{
+  position:absolute;
+
+  inset:0;
+
+  width:100%;
+
+  height:100%;
+
+  background:#eeeeee;
+
+  overflow:hidden;
+}
+
+
+.collection-loading-shimmer{
+  position:absolute;
+
+  inset:0;
+
+  background:
+    linear-gradient(
+      110deg,
+      #eeeeee 20%,
+      #f7f7f7 40%,
+      #eeeeee 60%
+    );
+
+  background-size:200% 100%;
+
+  animation:
+    collectionShimmer 1.4s linear infinite;
+}
+
+
+.collection-loading-bottom{
+  position:absolute;
+
+  left:14px;
+
+  right:14px;
+
+  bottom:14px;
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:space-between;
+
+  gap:8px;
+
+  z-index:2;
+}
+
+
+.collection-loading-title{
+  width:90px;
+
+  height:30px;
+
+  border-radius:999px;
+
+  background:rgba(255,255,255,.75);
+
+  animation:
+    collectionPulse 1.4s ease-in-out infinite;
+}
+
+
+.collection-loading-button{
+  width:70px;
+
+  height:30px;
+
+  border-radius:999px;
+
+  background:#dddddd;
+
+  animation:
+    collectionPulse 1.4s ease-in-out infinite;
+}
+
+
+/* ===============================
+   SHIMMER
+================================ */
+
+@keyframes collectionShimmer{
+
+  0%{
+    background-position:200% 0;
+  }
+
+  100%{
+    background-position:-200% 0;
+  }
+
+}
+
+
+/* ===============================
+   PULSE
+================================ */
+
+@keyframes collectionPulse{
+
+  0%,
+  100%{
+    opacity:.65;
+  }
+
+  50%{
+    opacity:1;
+  }
+
+}
+
+
+/* ===============================
+   MOBILE LOADING
+================================ */
+
+@media(max-width:768px){
+
+  .collection-loading-card{
+    aspect-ratio:1/1.18;
+
+    border-radius:12px;
+  }
+
+  .collection-loading-bottom{
+    left:8px;
+
+    right:8px;
+
+    bottom:8px;
+
+    gap:5px;
+  }
+
+  .collection-loading-title{
+    width:58px;
+
+    height:23px;
+  }
+
+  .collection-loading-button{
+    width:52px;
+
+    height:23px;
+  }
+
+}
+
+
+/* ===============================
+   SMALL MOBILE
+================================ */
+
+@media(max-width:420px){
+
+  .collection-loading-card{
+    aspect-ratio:1/1.12;
+
+    border-radius:10px;
+  }
+
+  .collection-loading-bottom{
+    left:7px;
+
+    right:7px;
+
+    bottom:7px;
+  }
+
+  .collection-loading-title{
+    width:52px;
+
+    height:21px;
+  }
+
+  .collection-loading-button{
+    width:46px;
+
+    height:21px;
+  }
+
+}
+.sparkle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(231,62,53,0.18) 60%, transparent 100%);
+  border-radius: 50%;
+  opacity: 0.7;
+  filter: blur(0.4px);
+  animation: sparkleFloat 18s linear infinite, sparkleTwinkle 3.6s ease-in-out infinite;
+}
+.sparkle { top: calc(var(--i) * 4%); left: calc(var(--i) * 3%); animation-delay: calc(var(--i) * -1.2s); }
+
+@keyframes sparkleFloat {
+  0% { transform: translateY(115%) scale(0.6); opacity: 0; }
+  20% { opacity: 0.95; }
+  80% { transform: translateY(-110%) scale(1.1); opacity: 0.6; }
+  100% { transform: translateY(-150%) scale(0.8); opacity: 0; }
+}
+@keyframes sparkleTwinkle {
+  0%,100% { opacity: 0.75; transform: scale(1); }
+  40% { opacity: 1; transform: scale(1.2); }
+  60% { opacity: 0.9; transform: scale(0.95); }
+}
+
+/* ---------------------------
+   HEADER
+---------------------------- */
+.collections-header {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 2.8rem;
+  text-align: center;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.collections-header h2 {
+  font-size: clamp(1.8rem, 3.4vw, 2.8rem);
+  font-weight: 900;
+  margin: 0;
+  letter-spacing: 0.6px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 4px 18px rgba(231,62,53,0.12);
+}
+.collections-subtitle {
+  font-size: 1.05rem;
+  color: var(--muted);
+  margin-top: 0.6rem;
+  font-weight: 500;
+}
+
+/* ---------------------------
+   GRID
+---------------------------- */
+.collections-grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.6rem;
+  max-width: 1300px;
+  margin: 2rem auto 0 auto;
+  padding: 0 1rem;
+}
+
+/* controls initial reveal animation for tiles (keeps your existing JS observer behavior) */
+.collection-link {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 520ms var(--ease), transform 520ms var(--ease);
+}
+.collection-link.reveal {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* hover card lift — soft red tint to shadow */
+.collection-link:hover {
+  transform: translateY(-8px);
+  transition: all 0.36s var(--ease);
+  box-shadow: 0 18px 40px rgba(231,62,53,0.06);
+}
+
+/* ---------------------------
+   RESPONSIVE
+---------------------------- */
+@media (max-width: 1024px) {
+  .collections-section { padding: 4.5rem 1.2rem; }
+}
+@media (max-width: 768px) {
+  .collections-section { padding: 3.6rem 1rem; }
+  .collections-grid { gap: 1.2rem; margin-top: 1.2rem; }
+}
+@media (max-width: 640px) {
+  .collections-grid {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 1rem;
+  }
+  .collection-link {
+    flex: 0 0 85%;
+    scroll-snap-align: center;
+  }
+}
+
+/* ===============================
+   GLOBAL HEADING ALIGNMENT FIX
+   (keeps other sections aligned)
+   =============================== */
+.arrivals-header,
+.collections-header,
+.trending-premium .arrivals-header,
+.new-arrivals-premium .arrivals-header,
+.best-sellers-section .arrivals-header {
+  text-align: center !important;
+  justify-content: center;
+  align-items: center;
+  margin: 0 auto 2.8rem auto;
+  width: 100%;
+  display: block;
+}
+
+.arrivals-header h2,
+.collections-header h2 {
+      text-align: center;
+  font-size: clamp(1.8rem, 3.4vw, 2.8rem);
+  font-weight: 900;
+  margin: 0;
+  letter-spacing: 0.6px;
+
+  /* Brighter red gradient + subtle glow for clarity on light bg */
+  background: linear-gradient(90deg, #e73e35 0%, #ff8c82 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow:
+    0 2px 6px rgba(231,62,53,0.25),
+    0 4px 18px rgba(231,62,53,0.12);
+
+  /* Optional: add slight contrast boost */
+  filter: brightness(1.05);
+}
+
+.arrivals-header p,
+.collections-subtitle,
+.arrivals-header .collections-subtitle {
+  text-align: center;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 1.05rem;
+  max-width: 700px;
+  margin: 0.6rem auto 0 auto;
+  line-height: 1.5;
+}
+
+/* Section padding consistency */
+.trending-premium,
+.new-arrivals-premium,
+.collections-section {
+  padding-top: 5rem;
+  padding-bottom: 5rem;
+}

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+  
+
+<head>
+  <script>
+(function () {
+
+  const host = window.location.hostname.replace("www.", "");
+
+  // Main website keeps original SEO
+  if (
+    host === "kiyuziyuofficial.com" ||
+    host === "localhost"  ||
+    host === "wholesaleantitarnishjewellery.com" 
+
+  ) {
+    return;
+  }
+
+  // Temporary loading SEO for seller stores
+  document.title = "Loading Store...";
+
+  const setMeta = (selector, value) => {
+
+    const tag = document.querySelector(selector);
+
+    if (tag) {
+      tag.setAttribute("content", value);
+    }
+
+  };
+
+  setMeta(
+    'meta[name="description"]',
+    'Loading store...'
+  );
+
+  setMeta(
+    'meta[property="og:title"]',
+    'Store'
+  );
+
+  setMeta(
+    'meta[property="og:description"]',
+    'Store'
+  );
+
+  setMeta(
+    'meta[name="twitter:title"]',
+    'Store'
+  );
+
+  setMeta(
+    'meta[name="twitter:description"]',
+    'Store'
+  );
+
+})();
+</script>
+  <meta charset="utf-8" />
+
+  <!-- Favicon -->
+  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+
+  <!-- Viewport -->
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Theme -->
+  <meta name="theme-color" content="#000000" />
+
+  <!-- ===== GLOBAL SEO ===== -->
+  <title>kiyuziyu | Premium Imitation & Anti-Tarnish Jewelry</title>
+
+  <meta
+    name="description"
+    content="kiyuziyu-by tanishka offers premium imitation and anti-tarnish jewelry for wholesalers and fashion lovers. Discover elegant, trendy jewelry crafted for everyday luxury."
+  />
+
+  <meta
+    name="keywords"
+    content="kiyuziyu,kiyuziyu by tanishka, imitation jewelry, anti tarnish jewelry, wholesale jewelry, fashion jewelry, artificial jewelry india"
+  />
+
+  <meta name="author" content="kiyuziyu-by tanishka" />
+  <meta name="robots" content="index, follow" />
+
+  <!-- ===== Open Graph (WhatsApp / Facebook / Instagram) ===== -->
+  <meta property="og:title" content="kiyuziyu" />
+  <meta
+    property="og:description"
+    content="Premium imitation & anti-tarnish jewelry by kiyuziyu. Perfect for wholesalers, retailers, and fashion lovers."
+  />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://kiyuziyuofficial.com" />
+  <meta property="og:image" content="https://kiyuziyuofficial.com/og-image.jpg" />
+  <meta name="google-site-verification" content="YOv4y7RYI71ApeMj48tNOgCyZCFouKpRxS-cEFcqx5Q" />
+
+  <!-- ===== Twitter ===== -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="kiyuziyu" />
+  <meta
+    name="twitter:description"
+    content="Explore premium imitation & anti-tarnish jewelry by kiyuziyu"
+  />
+  <meta name="twitter:image" content="https://kiyuziyuofficial.com/og-image.jpg" />
+
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+
+  <!-- Font Awesome -->
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
+  crossorigin="anonymous"
+  referrerpolicy="no-referrer"
+/>
+
+  <!-- Manifest -->
+  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+  <!-- Premium Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+
+<link
+  rel="preconnect"
+  href="https://fonts.gstatic.com"
+  crossorigin
+/>
+
+<link
+  href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Poppins:wght@300;400;500;600&display=swap"
+  rel="stylesheet"
+/>
+
+<style>
+
+html{
+  scroll-behavior:smooth;
+}
+
+body{
+  margin:0;
+
+  -webkit-font-smoothing:antialiased;
+
+  -moz-osx-font-smoothing:grayscale;
+
+  text-rendering:optimizeLegibility;
+}
+
+*{
+  box-sizing:border-box;
+}
+
+</style>
+<script>
+if (
+  window.location.hostname.replace("www.", "") ===
+  "kiyuziyubypawanratna.com"
+) {
+  const s = document.createElement("script");
+  s.async = true;
+  s.src =
+    "https://www.googletagmanager.com/gtag/js?id=G-YR9DDVR6B5";
+  document.head.appendChild(s);
+
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  window.gtag = gtag;
+
+  gtag("js", new Date());
+  gtag("config", "G-YR9DDVR6B5");
+}
+</script>
+</head>
+
+
+<body>
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <div id="root"></div>
+</body>
+
+</html>

@@ -1,0 +1,300 @@
+.dropshipper-payments{
+padding:30px;
+}
+
+.payments-table{
+width:100%;
+border-collapse:collapse;
+background:white;
+}
+
+.payments-table th,
+.payments-table td{
+padding:12px;
+border-bottom:1px solid #eee;
+text-align:center;
+}
+
+.payments-table th{
+background:#fafafa;
+font-weight:600;
+}
+
+.profit{
+color:#16a34a;
+font-weight:600;
+}
+
+.payable{
+color:#dc2626;
+font-weight:600;
+}.dropshipper-payments{
+padding:30px;
+}
+
+.payments-controls{
+display:flex;
+gap:10px;
+margin-bottom:20px;
+}
+
+.payments-controls input{
+padding:8px 10px;
+border:1px solid #ddd;
+border-radius:6px;
+}
+
+.payments-controls select{
+padding:8px;
+border-radius:6px;
+border:1px solid #ddd;
+}
+
+.payments-table{
+width:100%;
+border-collapse:collapse;
+background:white;
+}
+
+.payments-table th,
+.payments-table td{
+padding:12px;
+border-bottom:1px solid #eee;
+text-align:center;
+}
+
+.payments-table th{
+background:#fafafa;
+font-weight:600;
+}
+
+.status{
+padding:4px 10px;
+border-radius:20px;
+font-size:12px;
+font-weight:600;
+}
+
+.status-pending{
+background:#fff7ed;
+color:#ea580c;
+}
+
+.status-readytopack{
+background:#ecfdf5;
+color:#16a34a;
+}
+
+.status-cancelled{
+background:#fee2e2;
+color:#dc2626;
+}
+
+.profit{
+color:#16a34a;
+font-weight:600;
+}
+
+.payable{
+color:#dc2626;
+font-weight:600;
+}
+
+.payments-summary{
+margin-top:30px;
+display:grid;
+grid-template-columns:repeat(5,1fr);
+gap:20px;
+background:#fafafa;
+padding:20px;
+border-radius:10px;
+}
+
+.payments-summary div{
+display:flex;
+flex-direction:column;
+text-align:center;
+}
+/* =========================================
+   PAYMENT HISTORY
+========================================= */
+
+.payment-history{
+  margin-top:32px;
+  padding:24px;
+  border-radius:28px;
+  background:#fff;
+  border:1px solid #ececec;
+  box-shadow:
+    0 10px 30px rgba(0,0,0,.04);
+}
+
+.payment-history h3{
+  margin:0 0 20px;
+  font-size:1.15rem;
+  font-weight:700;
+  color:#111827;
+}
+
+/* =========================================
+   CHIP GRID
+========================================= */
+
+.payment-history-grid{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+}
+
+/* =========================================
+   PAYMENT CHIP
+========================================= */
+
+.payment-chip{
+  min-width:140px;
+  flex:1 0 140px;
+
+  max-width:180px;
+
+  padding:14px;
+
+  border-radius:18px;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255,255,255,.95),
+      rgba(248,250,252,.95)
+    );
+
+  border:1px solid rgba(0,0,0,.06);
+
+  box-shadow:
+    0 8px 20px rgba(0,0,0,.06);
+
+  transition:.25s ease;
+
+  cursor:pointer;
+
+  backdrop-filter:blur(12px);
+}
+
+.payment-chip:hover{
+  transform:translateY(-4px);
+
+  box-shadow:
+    0 18px 40px rgba(0,0,0,.12);
+}
+
+/* =========================================
+   DATE
+========================================= */
+
+.payment-chip-date{
+  font-size:.78rem;
+  color:#6b7280;
+  margin-bottom:8px;
+  font-weight:500;
+}
+
+/* =========================================
+   AMOUNT
+========================================= */
+
+.payment-chip-amount{
+  font-size:1.15rem;
+  font-weight:800;
+  color:#16a34a;
+  line-height:1;
+}
+
+/* =========================================
+   LABEL
+========================================= */
+
+.payment-chip-label{
+  margin-top:8px;
+
+  font-size:.72rem;
+
+  color:#94a3b8;
+
+  text-transform:uppercase;
+
+  letter-spacing:.08em;
+}
+
+/* =========================================
+   EMPTY STATE
+========================================= */
+
+.payment-history-empty{
+  padding:30px;
+  text-align:center;
+  color:#94a3b8;
+  border-radius:20px;
+  background:#f8fafc;
+}
+
+/* =========================================
+   PREMIUM SCROLL
+========================================= */
+
+.payment-history-grid::-webkit-scrollbar{
+  height:6px;
+}
+
+.payment-history-grid::-webkit-scrollbar-thumb{
+  background:#d1d5db;
+  border-radius:999px;
+}
+
+/* =========================================
+   MOBILE
+========================================= */
+
+@media(max-width:768px){
+
+  .payment-history{
+    padding:18px;
+  }
+
+  .payment-chip{
+    min-width:120px;
+    flex:1 0 calc(50% - 8px);
+    max-width:none;
+  }
+
+  .payment-chip-amount{
+    font-size:1rem;
+  }
+
+}
+.date-range-filter{
+  display:flex;
+  gap:16px;
+  align-items:end;
+  margin-bottom:20px;
+  flex-wrap:wrap;
+}
+
+.date-field{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.date-field label{
+  font-size:12px;
+  font-weight:600;
+  color:#64748b;
+}
+
+.date-field input{
+  height:42px;
+  padding:0 12px;
+  border:1px solid #e2e8f0;
+  border-radius:12px;
+  background:#fff;
+  font-size:14px;
+}

@@ -1,0 +1,148 @@
+.dropshipper-layout{
+display:flex;
+min-height:100vh;
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
+}
+
+/* ===============================
+SIDEBAR
+=============================== */
+
+.dropshipper-sidebar{
+width:260px;
+background:#0f172a;
+color:white;
+padding:25px 20px;
+display:flex;
+flex-direction:column;
+}
+
+.sidebar-header h2{
+font-size:20px;
+font-weight:600;
+margin-bottom:30px;
+}
+
+/* ===============================
+STORE LINK
+=============================== */
+
+.store-preview{
+background:#1e293b;
+padding:12px;
+border-radius:8px;
+font-size:12px;
+margin-bottom:30px;
+}
+
+.store-preview p{
+margin:0;
+opacity:0.7;
+font-size:11px;
+}
+
+.store-preview a{
+color:#38bdf8;
+text-decoration:none;
+font-size:12px;
+word-break:break-all;
+}
+
+.store-preview a:hover{
+text-decoration:underline;
+}
+
+/* ===============================
+NAV
+=============================== */
+
+.sidebar-nav{
+display:flex;
+flex-direction:column;
+gap:8px;
+}
+
+.sidebar-nav a{
+color:#cbd5f5;
+text-decoration:none;
+padding:10px 12px;
+border-radius:8px;
+font-size:14px;
+transition:all 0.2s;
+}
+
+.sidebar-nav a:hover{
+background:#1e293b;
+color:white;
+}
+
+.active-link{
+background:#2563eb;
+color:white !important;
+}
+
+/* ===============================
+CONTENT
+=============================== */
+
+.dropshipper-content{
+flex:1;
+background:#f1f5f9;
+display:flex;
+flex-direction:column;
+}
+
+/* HEADER */
+
+.content-header{
+background:white;
+padding:20px 30px;
+border-bottom:1px solid #e2e8f0;
+}
+
+.content-header h1{
+font-size:20px;
+font-weight:600;
+margin:0;
+}
+
+/* BODY */
+
+.content-body{
+padding:30px;
+}
+
+/* ===============================
+MOBILE
+=============================== */
+
+@media(max-width:900px){
+
+.dropshipper-sidebar{
+width:200px;
+}
+
+}
+
+@media(max-width:700px){
+
+.dropshipper-layout{
+flex-direction:column;
+}
+
+.dropshipper-sidebar{
+width:100%;
+flex-direction:row;
+justify-content:space-between;
+align-items:center;
+}
+
+.sidebar-nav{
+flex-direction:row;
+}
+
+.store-preview{
+display:none;
+}
+
+}

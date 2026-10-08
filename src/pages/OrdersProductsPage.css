@@ -1,0 +1,65 @@
+.opp-page{
+padding:20px;
+}
+
+.opp-title{
+margin-bottom:20px;
+}
+
+.opp-tabs{
+display:flex;
+gap:10px;
+margin-bottom:20px;
+}
+
+.opp-tab-btn{
+padding:10px 20px;
+border:none;
+background:#e0e0e0;
+cursor:pointer;
+border-radius:6px;
+font-weight:600;
+}
+
+.opp-tab-active{
+background:#007bff;
+color:white;
+}
+
+.opp-products-table,
+.opp-items-table{
+width:100%;
+border-collapse:collapse;
+}
+
+.opp-products-table th,
+.opp-products-table td,
+.opp-items-table th,
+.opp-items-table td{
+border:1px solid #ddd;
+padding:8px;
+}
+
+.opp-order-card{
+border:1px solid #ddd;
+margin-bottom:10px;
+border-radius:6px;
+overflow:hidden;
+}
+
+.opp-order-header{
+display:flex;
+justify-content:space-between;
+padding:12px;
+background:#f7f7f7;
+cursor:pointer;
+}
+
+.opp-order-items{
+padding:10px;
+}
+
+.opp-small-text{
+font-size:12px;
+color:#666;
+}

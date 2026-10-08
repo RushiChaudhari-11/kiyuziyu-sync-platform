@@ -1,0 +1,16 @@
+server:
+  port: 8080
+
+firebase:
+  project-id: jewellerywholesale-2e57c
+  # The following properties should be set via Environment Variables locally:
+  # FIREBASE_PROJECT_ID=jewellerywholesale-2e57c
+  # FIREBASE_CLIENT_EMAIL=your-service-account-email
+  # FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+  # NEVER commit real credentials to this file!
+
+shopify:
+  # The following properties should be set via Environment Variables locally:
+  # SHOPIFY_STORE_DOMAIN=your-store.myshopify.com
+  # SHOPIFY_ACCESS_TOKEN=shpat_...
+  # NEVER commit real credentials to this file!

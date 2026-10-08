@@ -1,0 +1,160 @@
+/* TermsAndPolicies.css — Light Luxury / Accessible Styles
+   Hooks:
+   - .terms-page (grid wrapper)
+   - .terms-toc (left table-of-contents)
+   - .terms-content (main article area)
+   - Uses CSS variables --gold / --light-gold for brand red accents
+*/
+
+:root{
+  --gold: #e73e35;       /* brand red */
+  --light-gold: #ff8c82; /* softer gradient end */
+  --bg: #ffffff;
+  --bg-soft: #f7f9fb;
+  --text: #1a1a1a;
+  --muted: #6c7a8a;
+  --card-shadow: rgba(14,23,36,0.06);
+  --border: rgba(14,23,36,0.06);
+  --radius: 12px;
+  --max-width: 1200px;
+  --ease: cubic-bezier(.2,.9,.2,1);
+}
+
+/* Page layout */
+.terms-page {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 32px;
+  max-width: var(--max-width);
+  margin: 48px auto;
+  padding: 24px;
+  box-sizing: border-box;
+  color: var(--text);
+}
+
+/* TOC (left column) */
+.terms-toc {
+  position: sticky;
+  top: 28px;
+  align-self: start;
+  padding: 18px;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--bg-soft), #ffffff);
+  box-shadow: 0 8px 26px var(--card-shadow);
+  border: 1px solid var(--border);
+}
+
+.terms-toc h2 {
+  font-size: 1.15rem;
+  margin: 0 0 12px 0;
+  font-weight: 800;
+  line-height: 1.1;
+  background: linear-gradient(90deg, var(--gold), var(--light-gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.terms-toc ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.terms-toc a {
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 700;
+  padding: 6px 8px;
+  display: inline-block;
+  border-radius: 8px;
+  transition: transform 180ms var(--ease), background 180ms var(--ease), color 180ms var(--ease);
+}
+
+.terms-toc a:hover,
+.terms-toc a:focus {
+  transform: translateX(4px);
+  color: var(--gold);
+}
+
+/* Active anchor (when clicked). We rely on :target for simple highlighting */
+.terms-toc a[href$="#product-quality"],
+.terms-toc a[href$="#pricing-policy"],
+.terms-toc a[href$="#order-payment"],
+.terms-toc a[href$="#return-refund"],
+.terms-toc a[href$="#disclaimer"]{
+  /* no-op: kept for future JS-based active state */
+}
+
+/* Main content */
+.terms-content {
+  background: linear-gradient(180deg,#ffffff, var(--bg-soft));
+  padding: 28px;
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px var(--card-shadow);
+  border: 1px solid var(--border);
+}
+
+.terms-section { margin-bottom: 22px; }
+
+.terms-section h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.terms-section p,
+.terms-section li {
+  color: var(--muted);
+  line-height: 1.6;
+  font-weight: 500;
+  margin: 0 0 8px 0;
+}
+
+.terms-section ul { margin: 8px 0 0 20px; }
+
+/* Simple blockquote/notice style for important rules */
+.terms-note {
+  background: linear-gradient(90deg, rgba(231,62,53,0.04), rgba(255,140,130,0.02));
+  border-left: 3px solid var(--gold);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--text);
+  margin: 12px 0;
+}
+
+/* Footer note inside page */
+.terms-footer {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* Small helpers */
+.terms-content a { color: var(--gold); text-decoration: underline; }
+
+/* Print-friendly adjustments */
+@media print {
+  .terms-page { grid-template-columns: 1fr; padding: 0; max-width: 100%; }
+  .terms-toc { display: none; }
+  .terms-content { box-shadow: none; border: none; }
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .terms-page { grid-template-columns: 1fr; gap: 16px; padding: 16px; }
+  .terms-toc { position: relative; top: auto; padding: 12px; display: flex; gap: 12px; overflow-x: auto; white-space: nowrap; border-radius: 10px; }
+  .terms-toc ul { display: flex; gap: 12px; }
+  .terms-toc a { padding: 8px 10px; }
+}
+
+/* Smooth-scroll helper for single-page navigation */
+html { scroll-behavior: smooth; }
+
+/* Accessibility: reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

@@ -1,0 +1,24 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: kiyuziyu-api
+
+firebase:
+  project-id: ${FIREBASE_PROJECT_ID:kiyuziyu-7ca67}
+  client-email: ${FIREBASE_CLIENT_EMAIL:}
+  private-key: ${FIREBASE_PRIVATE_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+shopify:
+  store-domain: ${SHOPIFY_STORE_DOMAIN:}
+  access-token: ${SHOPIFY_ACCESS_TOKEN:}
+  client-id: ${SHOPIFY_CLIENT_ID:50616f42c3e0cfbb5ba9f29a2143acf6}
+  client-secret: ${SHOPIFY_CLIENT_SECRET:your_client_secret_here}
+  api-version: ${SHOPIFY_API_VERSION:2026-07}

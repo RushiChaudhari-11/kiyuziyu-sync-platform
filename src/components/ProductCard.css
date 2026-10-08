@@ -1,0 +1,479 @@
+
+/* ==========================================
+   PREMIUM JEWELLERY PRODUCT CARD V4
+========================================== */
+
+:root{
+  --gold:#b8860b;
+  --gold-light:#fff4d6;
+
+  --text:#111827;
+  --text-light:#8a8f98;
+
+  --card-bg:#fffaf4;
+  --border:#f1e8dc;
+}
+
+/* CARD */
+
+.product-card{
+  background:linear-gradient(
+    180deg,
+    #fffdfb 0%,
+    #fffaf4 100%
+  );
+
+border-radius:42px;
+  overflow:hidden;
+
+  border:1px solid #e5e7eb;
+
+  box-shadow:
+    0 0 0 1px rgba(17,24,39,.05),
+    0 16px 40px rgba(0,0,0,.08);
+
+
+
+
+  transition:.35s ease;
+
+  display:flex;
+  flex-direction:column;
+
+  height:100%;
+  position:relative;
+}
+
+.product-card:hover{
+  transform:translateY(-8px);
+
+  box-shadow:
+    0 30px 60px rgba(0,0,0,.14);
+}
+
+/* IMAGE */
+
+.product-image-container{
+   width:calc(100% - 24px);
+
+  margin:12px;
+  margin-bottom:0;
+
+ border-radius:32px;
+
+  overflow:hidden;
+
+  box-shadow:
+    0 8px 20px rgba(0,0,0,.08);
+
+  aspect-ratio:4/5;
+
+  overflow:hidden;
+
+
+  background:#faf6f1;
+
+  box-shadow:
+    0 6px 18px rgba(0,0,0,.08);
+
+  position:relative;
+}
+
+.product-image-container > div{
+  width:100%;
+  height:100%;
+}
+
+.product-image{
+  width:100%;
+  height:100%;
+
+  object-fit:cover;
+
+  transition:transform .5s ease;
+}
+
+.product-card:hover .product-image{
+  transform:scale(1.04);
+}
+
+/* WISHLIST */
+
+.wishlist-btn{
+  position:absolute;
+  top:12px;
+  right:12px;
+
+  width:40px;
+  height:40px;
+
+  border:none;
+  border-radius:50%;
+
+  background:#fff;
+
+  box-shadow:0 4px 15px rgba(0,0,0,.15);
+
+  cursor:pointer;
+  z-index:10;
+}
+
+/* INFO */
+
+.product-info{
+  background:linear-gradient(
+    to bottom,
+    #fffdfb,
+    #fffaf4
+  );
+
+  padding:18px;
+
+  display:flex;
+  flex-direction:column;
+
+  gap:4px;
+border-radius:0 0 42px 42px;
+  flex-grow:1;
+}
+
+/* TITLE + STOCK */
+
+.product-header-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:8px;
+
+  width:100%;
+}
+
+.product-title{
+  flex:1;
+
+  font-size:15px;
+  font-weight:600;
+  line-height:1.35;
+
+  color:var(--text);
+
+  margin:0;
+
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+/* STOCK BADGE */
+
+.stock-badge{
+  background:#fff4d6 !important;
+  color:#8b6b00 !important;
+
+  border:1px solid #ead79f !important;
+
+  border-radius:999px;
+
+  padding:4px 8px;
+
+  font-size:10px;
+  font-weight:700;
+
+  line-height:1;
+}
+
+/* PRODUCT CODE */
+
+.product-code{
+  font-size:11px;
+  color:var(--text-light);
+  font-weight:500;
+
+  margin:0;
+}
+
+/* PRICE */
+
+.product-price{
+  font-size:18px;
+  font-weight:700;
+
+  color:var(--gold);
+
+  margin-top:8px;
+  margin-bottom:2px;
+}
+
+/* HIDE OLD STOCK LINE */
+.product-quantity {
+  display: inline-flex;
+  align-items: center;
+
+  margin-top: 6px;
+  padding: 4px 10px;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  color: #166534;
+  background: #dcfce7;
+
+  border: 1px solid #86efac;
+  border-radius: 999px;
+
+  width: fit-content;
+}
+
+.out-of-stock-text {
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+.product-quantity{
+  display:none;
+}
+
+/* BULK PRICING */
+
+.bulk-toggle-btn{
+  border:none;
+  background:none;
+
+  color:#2563eb;
+
+  font-size:11px;
+
+  padding:0;
+  margin-top:4px;
+
+  cursor:pointer;
+}
+
+.bulk-toggle-btn:hover{
+  text-decoration:underline;
+}
+
+.tiered-pricing-container{
+  margin-top:6px;
+
+  padding:8px;
+
+  border-radius:12px;
+
+  background:#fafafa;
+  border:1px solid #ececec;
+}
+
+.pricing-tier-row{
+  font-size:11px;
+  color:#374151;
+
+  padding:4px 0;
+}
+
+.pricing-tier-row:not(:last-child){
+  border-bottom:1px dashed #e5e7eb;
+}
+
+.active-tier{
+  color:#065f46;
+  font-weight:600;
+}
+
+/* VARIANTS */
+
+.variations-selector{
+  display:flex;
+  flex-wrap:wrap;
+
+  gap:6px;
+
+  margin-top:8px;
+}
+
+.variation-btn{
+  border:1px solid #e5e7eb;
+
+  border-radius:999px;
+
+  padding:4px 10px;
+
+  background:white;
+
+  font-size:11px;
+  font-weight:500;
+
+  cursor:pointer;
+
+  transition:.2s;
+}
+
+.variation-btn:hover{
+  border-color:var(--gold);
+}
+
+.variation-btn.selected{
+  background:var(--gold);
+  color:white;
+  border-color:var(--gold);
+}
+
+.variation-cart-qty{
+  margin-left:4px;
+
+  background:white;
+  color:var(--gold);
+
+  padding:1px 5px;
+
+  border-radius:20px;
+
+  font-weight:700;
+}
+
+/* ACTIONS */
+
+.product-actions{
+  padding:0 14px 14px;
+}
+
+/* ADD TO CART */
+
+.add-to-cart-btn{
+  width:100%;
+
+  height:42px;
+
+  border:none;
+  border-radius:999px;
+
+  background:#e73e35;
+  color:white;
+
+  font-size:13px;
+  font-weight:600;
+
+  cursor:pointer;
+
+  transition:.25s ease;
+}
+
+.add-to-cart-btn:hover{
+color:white;
+  background:#ff0e02;
+}
+
+.admin-mode{
+  padding:20px;
+}
+
+.admin-actions{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:15px;
+}
+
+.admin-actions button{
+  height:40px;
+  border:none;
+  border-radius:12px;
+  cursor:pointer;
+}
+
+.highlight-btn.active{
+  background:#b8860b;
+  color:white;
+}
+.add-to-cart-btn:disabled{
+  background:#d1d5db;
+  cursor:not-allowed;
+}
+
+/* QUANTITY CONTROLS */
+
+.quantity-controls{
+  width:100%;
+
+  height:42px;
+
+  border-radius:999px;
+
+  border:1px solid #e5e7eb;
+
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+
+  overflow:hidden;
+}
+
+.quantity-controls button{
+  width:42px;
+  height:42px;
+
+  border:none;
+  background:white;
+
+  cursor:pointer;
+
+  font-size:18px;
+  font-weight:600;
+}
+
+.quantity-controls span{
+  font-size:14px;
+  font-weight:700;
+}
+
+/* OUT OF STOCK */
+
+.out-of-stock-overlay{
+  position:absolute;
+  inset:0;
+
+  background:rgba(255,255,255,.92);
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  font-size:14px;
+  font-weight:700;
+
+  color:#dc2626;
+
+  z-index:20;
+}
+
+/* MOBILE */
+
+@media(max-width:768px){
+
+  .product-card{
+    border-radius:20px;
+  }
+
+  .product-image-container{
+    aspect-ratio:4/5;
+  }
+
+  .product-title{
+    font-size:14px;
+  }
+
+  .product-price{
+    font-size:16px;
+  }
+
+  .stock-badge{
+    font-size:9px;
+    padding:3px 7px;
+  }
+
+  .add-to-cart-btn{
+    height:38px;
+    font-size:12px;
+  }
+}

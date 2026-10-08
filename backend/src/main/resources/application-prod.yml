@@ -1,0 +1,7 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+firebase:
+  project-id: kiyuziyu-7ca67

@@ -1,0 +1,231 @@
+/* ================================
+   PAGE WRAPPER
+================================ */
+
+.inventory-container {
+  max-width: 1100px;
+  margin: auto;
+  padding: 40px 20px;
+  background: #f6f8fb;
+  min-height: 100vh;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* ================================
+   PAGE TITLE
+================================ */
+
+.inventory-header-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 30px;
+  color: #111827;
+}
+
+/* ================================
+   COLLECTION CARD
+================================ */
+
+.inventory-collection-card {
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.05);
+  transition: all 0.25s ease;
+}
+
+.inventory-collection-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.08);
+}
+
+/* ================================
+   COLLECTION HEADER
+================================ */
+
+.inventory-collection-header {
+  display: grid;
+  grid-template-columns: 1fr 140px 180px;
+  align-items: center;
+  padding: 18px 22px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(180deg,#fafafa,#f4f4f4);
+}
+
+.inventory-collection-header:hover {
+  background: #f1f5f9;
+}
+
+.inventory-collection-name {
+  font-size: 16px;
+}
+
+.inventory-collection-qty {
+  text-align: right;
+  color: #374151;
+}
+
+.inventory-collection-value {
+  text-align: right;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* remove default arrow */
+
+.inventory-collection-card summary::-webkit-details-marker {
+  display: none;
+}
+
+/* custom arrow */
+
+.inventory-collection-header::after {
+  content: "▾";
+  font-size: 12px;
+  margin-left: 10px;
+  color: #6b7280;
+}
+
+/* ================================
+   SUBCOLLECTION LIST
+================================ */
+
+.inventory-subcollection-wrapper {
+  padding: 8px 22px 18px 22px;
+  background: white;
+}
+
+/* sub row */
+
+.inventory-subcollection-row {
+  display: grid;
+  grid-template-columns: 1fr 140px 180px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 15px;
+  transition: background 0.15s ease;
+}
+
+.inventory-subcollection-row:hover {
+  background: #f9fafb;
+}
+
+.inventory-subcollection-row:last-child {
+  border-bottom: none;
+}
+
+.inventory-subcollection-name {
+  color: #374151;
+}
+
+.inventory-subcollection-qty {
+  text-align: right;
+  color: #374151;
+}
+
+.inventory-subcollection-value {
+  text-align: right;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* ================================
+   GRAND TOTAL
+================================ */
+
+.inventory-grand-total {
+  display: grid;
+  grid-template-columns: 1fr 140px 180px;
+  padding: 18px 22px;
+  margin-top: 30px;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(90deg,#111827,#1f2937);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.18);
+}
+
+.inventory-total-label {
+  font-size: 18px;
+}
+
+.inventory-total-qty {
+  text-align: right;
+}
+
+.inventory-total-value {
+  text-align: right;
+}
+
+/* ================================
+   RESPONSIVE
+================================ */
+
+@media (max-width: 768px) {
+
+  .inventory-header-title {
+    font-size: 24px;
+  }
+
+  .inventory-collection-header,
+  .inventory-subcollection-row,
+  .inventory-grand-total {
+    grid-template-columns: 1fr 80px 110px;
+    font-size: 14px;
+  }
+
+}
+/* =========================
+   DASHBOARD STATS
+========================= */
+
+.inventory-stats {
+  display: grid;
+  grid-template-columns: repeat(3,1fr);
+  gap: 18px;
+  margin-bottom: 30px;
+}
+
+.inventory-stat-card {
+  background: white;
+  padding: 22px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-stat-title {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.inventory-stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* hover effect */
+
+.inventory-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.08);
+}
+
+/* responsive */
+
+@media (max-width:768px){
+
+.inventory-stats{
+grid-template-columns:1fr;
+}
+
+}

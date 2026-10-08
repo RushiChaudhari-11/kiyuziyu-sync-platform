@@ -1,0 +1,284 @@
+.shop-look {
+  width: 100%;
+  padding: 90px 0;
+  background: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #faf8f5 100%
+  );
+  overflow: hidden;
+}
+
+/* ---------- HEADER ---------- */
+
+.shop-look-header {
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto 55px;
+  padding: 0 20px;
+}
+
+.shop-look-tag {
+  display: inline-block;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+
+  color: #b08d57;
+
+  margin-bottom: 14px;
+}
+
+.shop-look-header h2 {
+  margin: 0;
+
+  font-size: clamp(2.1rem, 4vw, 3.4rem);
+  font-weight: 700;
+  line-height: 1.1;
+
+  letter-spacing: -0.03em;
+
+  color: #111827;
+}
+
+.shop-look-header p {
+  margin-top: 14px;
+
+  font-size: 1rem;
+  line-height: 1.7;
+
+  color: #6b7280;
+}
+
+/* ---------- SLIDER ---------- */
+
+.shop-look-slider {
+  display: flex;
+  gap: 24px;
+
+  overflow-x: auto;
+  scroll-behavior: smooth;
+
+  padding: 0 40px 10px;
+
+  scrollbar-width: none;
+}
+
+.shop-look-slider::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------- CARD ---------- */
+
+.shop-look-card {
+  position: relative;
+
+  min-width: 290px;
+  width: 290px;
+
+  height: 540px;
+
+  border-radius: 32px;
+
+  overflow: hidden;
+
+  flex-shrink: 0;
+  cursor: pointer;
+
+  background: #f5f5f5;
+
+  box-shadow:
+    0 15px 35px rgba(0, 0, 0, 0.08);
+
+  transition:
+    transform 0.4s ease,
+    box-shadow 0.4s ease;
+}
+
+.shop-look-card:hover {
+  transform: translateY(-10px);
+
+  box-shadow:
+    0 28px 55px rgba(0, 0, 0, 0.15);
+}
+
+/* ---------- VIDEO ---------- */
+
+.shop-look-card video {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+  display: block;
+
+  transition: transform 0.6s ease;
+}
+
+.shop-look-card:hover video {
+  transform: scale(1.06);
+}
+
+/* ---------- SOUND BUTTON ---------- */
+
+.reel-sound-btn {
+  position: absolute;
+
+  top: 16px;
+  right: 16px;
+
+  width: 42px;
+  height: 42px;
+
+  border: none;
+  border-radius: 50%;
+
+  background: rgba(255, 255, 255, 0.15);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  color: white;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+
+  z-index: 10;
+
+  transition:
+    background 0.25s ease,
+    transform 0.25s ease;
+}
+
+.reel-sound-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+
+  transform: scale(1.05);
+}
+
+/* ---------- OVERLAY ---------- */
+
+.reel-overlay {
+  position: absolute;
+
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  padding: 60px 20px 20px;
+
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.75),
+    rgba(0, 0, 0, 0.15),
+    transparent
+  );
+}
+
+.reel-overlay-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reel-play-icon {
+  width: 36px;
+  height: 36px;
+
+  border-radius: 50%;
+
+  background: rgba(255, 255, 255, 0.18);
+
+  backdrop-filter: blur(10px);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  color: white;
+}
+
+.reel-overlay span {
+  color: white;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  letter-spacing: 0.02em;
+}
+
+/* ---------- PLACEHOLDER ---------- */
+
+.shop-look-placeholder {
+  width: 100%;
+  height: 100%;
+
+  background: linear-gradient(
+    135deg,
+    #f8f8f8,
+    #ececec
+  );
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shop-look-placeholder span {
+  color: #777;
+  font-size: 15px;
+}
+
+/* ---------- MOBILE ---------- */
+
+@media (max-width: 768px) {
+  .shop-look {
+    padding: 60px 0;
+  }
+
+  .shop-look-header {
+    margin-bottom: 36px;
+    padding: 0 16px;
+  }
+
+  .shop-look-header h2 {
+    font-size: 2rem;
+  }
+
+  .shop-look-header p {
+    font-size: 0.92rem;
+  }
+
+  .shop-look-slider {
+    gap: 14px;
+    padding: 0 16px 10px;
+  }
+
+  .shop-look-card {
+    min-width: 210px;
+    width: 210px;
+
+    height: 380px;
+
+    border-radius: 24px;
+  }
+
+  .reel-sound-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .reel-play-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .reel-overlay {
+    padding: 45px 16px 16px;
+  }
+}

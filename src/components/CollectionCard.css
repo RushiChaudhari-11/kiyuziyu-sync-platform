@@ -1,0 +1,750 @@
+/* ===============================
+   CollectionCard.css
+
+   Premium Image Collection Cards
+================================ */
+
+:root{
+
+  --accent:#e73e35;
+
+  --accent-light:#ff8c82;
+
+  --text-dark:#0e1724;
+
+  --card-radius:14px;
+
+  --ease:cubic-bezier(.2,.9,.2,1);
+
+}
+
+
+/* ===============================
+   GRID
+================================ */
+
+.collection-gridmain{
+
+  display:grid;
+
+  grid-template-columns:
+    repeat(4,minmax(0,1fr));
+
+  gap:24px;
+
+  width:100%;
+
+  padding:4px 0;
+
+  align-items:start;
+
+  box-sizing:border-box;
+
+}
+
+
+/* ===============================
+   CARD
+================================ */
+
+.collection-card{
+
+  position:relative;
+
+  width:100%;
+
+  overflow:hidden;
+
+  cursor:pointer;
+
+  background:#fff;
+
+  border-radius:var(--card-radius);
+
+  box-sizing:border-box;
+
+  transition:
+    transform .35s var(--ease),
+    box-shadow .35s var(--ease);
+
+}
+
+
+/* ===============================
+   CARD HOVER
+================================ */
+
+.collection-card:hover{
+
+  transform:translateY(-6px);
+
+  box-shadow:
+    0 14px 35px rgba(15,23,42,.10);
+
+}
+
+
+/* ===============================
+   MEDIA / IMAGE AREA
+================================ */
+
+.collection-card-media{
+
+  position:relative;
+
+  width:100%;
+
+  aspect-ratio:4/5;
+
+  overflow:hidden;
+
+  border-radius:var(--card-radius);
+
+  background:#f5f5f5;
+
+}
+
+
+/* ===============================
+   IMAGE
+================================ */
+
+.collection-image{
+
+  position:absolute;
+
+  inset:0;
+
+  width:100%;
+
+  height:100%;
+
+  object-fit:cover;
+
+  opacity:0;
+
+  z-index:0;
+
+  user-select:none;
+
+  -webkit-user-drag:none;
+
+  transition:
+    opacity .8s ease,
+    transform 1.2s var(--ease);
+
+}
+
+
+/* ===============================
+   ACTIVE IMAGE
+================================ */
+
+.collection-image.active{
+
+  opacity:1;
+
+  z-index:1;
+
+}
+
+
+/* ===============================
+   IMAGE HOVER ZOOM
+================================ */
+
+.collection-card:hover
+.collection-image.active{
+
+  transform:scale(1.06);
+
+}
+
+
+/* ===============================
+   IMAGE PLACEHOLDER
+================================ */
+
+.collection-image-placeholder{
+
+  width:100%;
+
+  height:100%;
+
+  background:
+    linear-gradient(
+      135deg,
+      #f5f5f5,
+      #eeeeee
+    );
+
+}
+
+
+/* ===============================
+   CONTENT BELOW IMAGE
+================================ */
+
+.collection-card-content{
+
+  width:100%;
+
+  display:flex;
+
+  flex-direction:column;
+
+  align-items:flex-start;
+
+  gap:6px;
+
+  padding:12px 2px 4px;
+
+  box-sizing:border-box;
+
+  background:#fff;
+
+}
+
+
+/* ===============================
+   COLLECTION NAME
+================================ */
+
+.product-pill{
+
+  display:block;
+
+  width:100%;
+
+  max-width:100%;
+
+  margin:0;
+
+  padding:0;
+
+  background:transparent;
+
+  border:none;
+
+  border-radius:0;
+
+  color:var(--text-dark);
+
+  font-weight:700;
+
+  font-size:.98rem;
+
+  line-height:1.2;
+
+  letter-spacing:-.1px;
+
+  white-space:nowrap;
+
+  overflow:hidden;
+
+  text-overflow:ellipsis;
+
+  box-sizing:border-box;
+
+}
+
+
+/* ===============================
+   EXPLORE COLLECTION
+================================ */
+
+.btn-pill{
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:flex-start;
+
+  gap:6px;
+
+  width:auto;
+
+  padding:0;
+
+  margin:0;
+
+  border:none;
+
+  border-radius:0;
+
+  background:transparent;
+
+  color:var(--accent);
+
+  font-weight:700;
+
+  font-size:.82rem;
+
+  line-height:1.2;
+
+  white-space:nowrap;
+
+  box-shadow:none;
+
+  cursor:pointer;
+
+  transition:
+    color .25s ease;
+
+}
+
+
+/* ===============================
+   EXPLORE HOVER
+================================ */
+
+.collection-card:hover
+.btn-pill{
+
+  color:var(--accent-light);
+
+}
+
+
+/* ===============================
+   ARROW
+================================ */
+
+.arrow{
+
+  display:inline-block;
+
+  font-size:.9rem;
+
+  line-height:1;
+
+  transition:
+    transform .25s ease;
+
+}
+
+
+.collection-card:hover
+.arrow{
+
+  transform:translateX(4px);
+
+}
+
+
+/* ===============================
+   ADMIN ACTIONS
+================================ */
+
+.collection-admin-actions{
+
+  position:absolute;
+
+  top:10px;
+
+  left:10px;
+
+  display:flex;
+
+  gap:8px;
+
+  z-index:20;
+
+}
+
+
+.collection-admin-actions button{
+
+  padding:6px 10px;
+
+  border-radius:8px;
+
+  border:none;
+
+  font-size:.8rem;
+
+  font-weight:600;
+
+  cursor:pointer;
+
+  background:#fff;
+
+  color:#111827;
+
+  box-shadow:
+    0 4px 12px rgba(0,0,0,.15);
+
+  transition:
+    transform .2s ease,
+    box-shadow .2s ease;
+
+}
+
+
+.collection-admin-actions button:hover{
+
+  transform:translateY(-2px);
+
+  box-shadow:
+    0 6px 16px rgba(0,0,0,.2);
+
+}
+
+
+/* ===============================
+   TABLET
+================================ */
+
+@media(max-width:1200px){
+
+  .collection-gridmain{
+
+    grid-template-columns:
+      repeat(3,minmax(0,1fr));
+
+    gap:20px;
+
+  }
+
+}
+
+
+/* ===============================
+   TABLET
+================================ */
+
+@media(max-width:992px){
+
+  .collection-gridmain{
+
+    grid-template-columns:
+      repeat(2,minmax(0,1fr));
+
+    gap:18px;
+
+  }
+
+}
+
+
+/* ===============================
+   MOBILE
+================================ */
+
+@media(max-width:768px){
+
+  .collection-gridmain{
+
+    grid-template-columns:
+      repeat(2,minmax(0,1fr));
+
+    gap:12px;
+
+  }
+
+
+  /* =============================
+     CARD
+  ============================= */
+
+  .collection-card{
+
+    border-radius:12px;
+
+  }
+
+
+  .collection-card:hover{
+
+    transform:none;
+
+    box-shadow:none;
+
+  }
+
+
+  /* =============================
+     IMAGE
+  ============================= */
+
+  .collection-card-media{
+
+    aspect-ratio:1/1.12;
+
+    border-radius:12px;
+
+  }
+
+
+  .collection-card:hover
+  .collection-image.active{
+
+    transform:none;
+
+  }
+
+
+  /* =============================
+     CONTENT
+  ============================= */
+
+  .collection-card-content{
+
+    padding:7px 1px 3px;
+
+    gap:4px;
+
+  }
+
+
+  /* =============================
+     COLLECTION NAME
+  ============================= */
+
+  .product-pill{
+
+    width:100%;
+
+    font-size:.68rem;
+
+    line-height:1.2;
+
+    font-weight:700;
+
+    letter-spacing:0;
+
+  }
+
+
+  /* =============================
+     EXPLORE COLLECTION
+  ============================= */
+
+  .btn-pill{
+
+    font-size:.59rem;
+
+    line-height:1.2;
+
+    gap:3px;
+
+  }
+
+
+  /* =============================
+     ARROW
+  ============================= */
+
+  .arrow{
+
+    font-size:.68rem;
+
+  }
+
+
+  /* =============================
+     ADMIN ACTIONS
+  ============================= */
+
+  .collection-admin-actions{
+
+    top:6px;
+
+    left:6px;
+
+    gap:4px;
+
+  }
+
+
+  .collection-admin-actions button{
+
+    padding:4px 6px;
+
+    border-radius:6px;
+
+    font-size:.6rem;
+
+  }
+
+}
+
+
+/* ===============================
+   SMALL MOBILE
+================================ */
+
+@media(max-width:420px){
+
+  .collection-gridmain{
+
+    grid-template-columns:
+      repeat(2,minmax(0,1fr));
+
+    gap:9px;
+
+  }
+
+
+  /* =============================
+     CARD
+  ============================= */
+
+  .collection-card{
+
+    border-radius:10px;
+
+  }
+
+
+  /* =============================
+     IMAGE
+  ============================= */
+
+  .collection-card-media{
+
+    aspect-ratio:1/1.08;
+
+    border-radius:10px;
+
+  }
+
+
+  /* =============================
+     CONTENT
+  ============================= */
+
+  .collection-card-content{
+
+    padding:6px 1px 2px;
+
+    gap:3px;
+
+  }
+
+
+  /* =============================
+     NAME
+  ============================= */
+
+  .product-pill{
+
+    font-size:.64rem;
+
+    line-height:1.15;
+
+  }
+
+
+  /* =============================
+     EXPLORE
+  ============================= */
+
+  .btn-pill{
+
+    font-size:.55rem;
+
+    line-height:1.15;
+
+    gap:3px;
+
+  }
+
+
+  .arrow{
+
+    font-size:.62rem;
+
+  }
+
+}
+
+
+/* ===============================
+   VERY SMALL PHONES
+================================ */
+
+@media(max-width:360px){
+
+  .collection-gridmain{
+
+    gap:8px;
+
+  }
+
+
+  .collection-card{
+
+    border-radius:9px;
+
+  }
+
+
+  .collection-card-media{
+
+    aspect-ratio:1/1.05;
+
+    border-radius:9px;
+
+  }
+
+
+  .collection-card-content{
+
+    padding:5px 1px 1px;
+
+    gap:3px;
+
+  }
+
+
+  .product-pill{
+
+    font-size:.59rem;
+
+  }
+
+
+  .btn-pill{
+
+    font-size:.52rem;
+
+  }
+
+
+  .arrow{
+
+    font-size:.58rem;
+
+  }
+
+}
+
+
+/* ===============================
+   ACCESSIBILITY
+================================ */
+
+.collection-card:focus-visible{
+
+  outline:2px solid var(--accent);
+
+  outline-offset:3px;
+
+}
+
+
+/* ===============================
+   LINK RESET
+================================ */
+
+.collection-link,
+.collection-link *,
+.collection-link:hover,
+.collection-link:focus,
+.collection-link:active{
+
+  text-decoration:none !important;
+
+}

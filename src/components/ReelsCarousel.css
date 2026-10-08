@@ -1,0 +1,105 @@
+/* ---------- WRAPPER ---------- */
+.reels-carousel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- STAGE ---------- */
+.reels-stage {
+  height: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ---------- TRACK ---------- */
+.reels-track {
+  position: relative;
+  width: 1300px;
+  height: 100%;
+}
+
+/* ---------- SLOT ---------- */
+.reel-slot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center;
+  transition:
+    transform 0.8s cubic-bezier(.22,.61,.36,1),
+    opacity 0.6s ease;
+  will-change: transform, opacity;
+}
+
+/* ---------- POSITIONS ---------- */
+
+.reel-slot.center {
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 5;
+  opacity: 1;
+}
+
+.reel-slot.left {
+  transform: translate(calc(-50% - 340px), calc(-50% + 36px)) scale(0.88);
+  z-index: 4;
+  opacity: 0.65;
+}
+
+.reel-slot.far-left {
+  transform: translate(calc(-50% - 640px), calc(-50% + 76px)) scale(0.75);
+  z-index: 3;
+  opacity: 0.35;
+}
+
+.reel-slot.right {
+  transform: translate(calc(-50% + 340px), calc(-50% + 36px)) scale(0.88);
+  z-index: 4;
+  opacity: 0.65;
+}
+
+.reel-slot.far-right {
+  transform: translate(calc(-50% + 640px), calc(-50% + 76px)) scale(0.75);
+  z-index: 3;
+  opacity: 0.35;
+}
+
+/* ---------- NAV ---------- */
+.nav-btn {
+  position: absolute;
+  z-index: 20;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.nav-btn.left {
+  left: -26px;
+}
+
+.nav-btn.right {
+  right: -26px;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 768px) {
+  .reels-stage {
+    height: 500px;
+  }
+
+  .reel-slot.left,
+  .reel-slot.right,
+  .reel-slot.far-left,
+  .reel-slot.far-right {
+    opacity: 0;
+    pointer-events: none;
+  }
+}

@@ -1,0 +1,128 @@
+/* ================= FLOAT WRAPPER ================= */
+
+.bmm-float{
+  position:fixed;
+
+  right:0;          /* 🔥 FULL RIGHT EDGE */
+  bottom:22px;
+
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;   /* Align to edge */
+
+  gap:12px;
+  z-index:9999;
+
+  padding-right:12px;     /* small spacing from edge */
+}
+.instagram {
+  background: linear-gradient(
+    45deg,
+    #f09433,
+    #e6683c,
+    #dc2743,
+    #cc2366,
+    #bc1888
+  );
+  color: white;
+}
+
+.instagram:hover {
+  transform: scale(1.08);
+  box-shadow: 0 8px 20px rgba(188, 24, 136, 0.35);
+}
+
+/* ================= ROUND ICON BUTTONS ================= */
+
+.bmm-float-icon{
+  width:46px;
+  height:46px;
+  border-radius:50%;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  color:#fff;
+  font-size:20px;
+
+  box-shadow:0 6px 16px rgba(0,0,0,.25);
+  transition:all .25s ease;
+  cursor:pointer;
+  text-decoration:none;
+  border:none;
+}
+
+/* Hover */
+
+.bmm-float-icon:hover{
+  transform:translateY(-3px) scale(1.06);
+  box-shadow:0 10px 24px rgba(0,0,0,.35);
+}
+
+/* COLORS */
+
+.bmm-float-icon.whatsapp{
+  background:#25D366;
+}
+
+.bmm-float-icon.call{
+  background:#0e3f66;
+}
+
+/* ================= APPOINTMENT RECTANGLE ================= */
+
+.bmm-float-appointment{
+  display:flex;
+  align-items:center;
+  gap:10px;
+
+  background:linear-gradient(135deg,#f28c28,#ffb347);
+  color:#fff;
+
+  padding:12px 18px;
+  border:none;
+  border-radius:40px;
+
+  font-weight:600;
+  font-size:14px;
+  white-space:nowrap;
+
+  cursor:pointer;
+  box-shadow:0 8px 20px rgba(242,140,40,.4);
+  transition:all .25s ease;
+}
+
+/* Icon */
+
+.bmm-float-appointment svg{
+  font-size:16px;
+}
+
+/* Hover */
+
+.bmm-float-appointment:hover{
+  transform:translateY(-3px);
+  box-shadow:0 14px 28px rgba(242,140,40,.55);
+}
+
+/* ================= MOBILE ================= */
+
+@media (max-width:600px){
+
+  .bmm-float{
+    bottom:16px;
+    padding-right:10px;
+  }
+
+  .bmm-float-icon{
+    width:42px;
+    height:42px;
+    font-size:18px;
+  }
+
+  .bmm-float-appointment{
+    padding:10px 14px;
+    font-size:12px;
+  }
+}

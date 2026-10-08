@@ -1,0 +1,216 @@
+/* =========================
+   PAGE
+========================= */
+
+.stock-check-page {
+  padding: 20px;
+  background: #f7f7f7;
+  min-height: 100vh;
+}
+
+.stock-check-page h2 {
+  margin-bottom: 20px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #222;
+}
+
+/* =========================
+   FILTERS
+========================= */
+
+.stock-check-page select {
+  width: 250px;
+  padding: 12px;
+  margin-right: 12px;
+  margin-bottom: 20px;
+
+  border: 1px solid #ddd;
+  border-radius: 10px;
+
+  background: white;
+  font-size: 14px;
+
+  outline: none;
+  transition: 0.2s;
+}
+
+.stock-check-page select:focus {
+  border-color: #111;
+}
+
+/* =========================
+   TABLE
+========================= */
+
+.stock-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  background: white;
+  border-radius: 14px;
+  overflow: hidden;
+
+  box-shadow:
+    0 2px 10px rgba(0,0,0,0.06);
+}
+
+/* =========================
+   HEADER
+========================= */
+
+.stock-table thead {
+  background: #111;
+  color: white;
+}
+
+.stock-table th {
+  padding: 14px 12px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* =========================
+   BODY
+========================= */
+
+.stock-table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid #eee;
+
+  font-size: 14px;
+  color: #333;
+  vertical-align: middle;
+}
+
+/* =========================
+   ROW HOVER
+========================= */
+
+.stock-table tbody tr {
+  transition: 0.2s;
+}
+
+.stock-table tbody tr:hover {
+  background: #fafafa;
+}
+
+/* =========================
+   LAST ROW
+========================= */
+
+.stock-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* =========================
+   STOCK COLORS
+========================= */
+
+.stock-table td:nth-child(4) {
+  font-weight: 700;
+  color: #0f8a00;
+}
+
+.stock-table td:nth-child(5),
+.stock-table td:nth-child(6) {
+  font-weight: 600;
+  color: #d98200;
+}
+
+.stock-table td:nth-child(7) {
+  font-weight: 700;
+  color: #d10000;
+}
+
+.stock-table td:nth-child(8) {
+  font-weight: 700;
+  color: #0066cc;
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 1100px) {
+
+  .stock-check-page {
+    overflow-x: auto;
+  }
+
+  .stock-table {
+    min-width: 950px;
+  }
+
+}
+
+/* =========================
+   MOBILE
+========================= */
+
+@media (max-width: 768px) {
+
+  .stock-check-page {
+    padding: 14px;
+  }
+
+  .stock-check-page h2 {
+    font-size: 22px;
+  }
+
+  .stock-check-page select {
+    width: 100%;
+    margin-right: 0;
+  }
+
+}
+.stock-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.export-btn {
+  background: #111;
+  color: white;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: 0.2s;
+}
+
+.export-btn:hover {
+  opacity: 0.9;
+}
+.stock-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.stock-search {
+  flex: 1;
+  min-width: 260px;
+
+  padding: 12px 14px;
+
+  border: 1px solid #ddd;
+  border-radius: 10px;
+
+  font-size: 14px;
+  outline: none;
+
+  background: white;
+}
+
+.stock-search:focus {
+  border-color: #111;
+}

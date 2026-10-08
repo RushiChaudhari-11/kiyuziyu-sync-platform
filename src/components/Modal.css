@@ -1,0 +1,224 @@
+:root {
+  --primary-color: #5a7d7d;
+  --secondary-color: #8b6b6c;
+  --text-color: #333;
+  --light-text-color: #666;
+  --border-color: #e0e0e0;
+  --background-light: #f8f9fa;
+  --modal-bg-color: #fff;
+  --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+}
+
+.modal-backdrop {
+  /* Layout */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* Appearance */
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.modal-content {
+  /* Box Model */
+  width: 90%;
+  max-width: 600px;
+  padding: 30px;
+  border-radius: 10px;
+  max-height: 80vh;
+  overflow-y: auto;
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  /* Appearance */
+  background-color: var(--modal-bg-color);
+  box-shadow: var(--shadow-md);
+  position: relative;
+}
+
+.modal-header {
+  /* Layout */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  /* Box Model */
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+  /* Appearance */
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+  /* Typography */
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--primary-color);
+}
+
+.modal-close-btn {
+  /* Appearance */
+  background: none;
+  border: none;
+  color: var(--light-text-color);
+  transition: color 0.2s ease;
+  /* Typography */
+  font-size: 2rem;
+  /* Interactivity */
+  cursor: pointer;
+}
+
+.modal-close-btn:hover {
+  color: var(--text-color);
+}
+
+.modal-body {
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.order-info-group {
+  /* Box Model */
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  /* Appearance */
+  background-color: var(--background-light);
+}
+
+.order-info-group h4 {
+  /* Typography */
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.2rem;
+  color: var(--secondary-color);
+}
+
+.order-items-list {
+  /* List Styles */
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.order-items-list li {
+  /* Layout */
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  /* Box Model */
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  /* Appearance */
+  border-bottom: 1px solid var(--border-color);
+}
+
+.order-items-list li:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.order-items-list img {
+  /* Box Model */
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  /* Appearance */
+  object-fit: contain;
+}
+
+.order-items-list li div {
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.order-items-list li p {
+  /* Typography */
+  margin: 0;
+  font-size: 0.9em;
+}
+
+.modal-footer {
+  /* Layout */
+  display: flex;
+  justify-content: flex-end;
+  /* Box Model */
+  padding-top: 15px;
+  margin-top: 15px;
+  /* Appearance */
+  border-top: 1px solid var(--border-color);
+}
+
+.modal-footer select,
+.modal-footer button {
+  /* Typography */
+  font-size: 1em;
+  /* Box Model */
+  padding: 10px 15px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  /* Interactivity */
+  cursor: pointer;
+}
+
+.modal-footer select {
+  padding: 10px 15px;
+}
+
+.modal-footer button {
+  padding: 10px 20px;
+  border: none;
+  background-color: var(--secondary-color);
+  color: white;
+}/* Hide the entire modal backdrop and other non-printable elements */
+/* Modal.css (Existing Logic) */
+
+@media print {
+  /* Hides the modal chrome, footer, and header */
+  .modal-backdrop, .modal-footer, .modal-header {
+    display: none !important;
+  }
+
+  /* Makes the content full screen */
+  .modal-content {
+    width: 100% !important;
+    height: 100% !important;
+    /* ... other reset styles ... */
+  }
+
+  /* Default: Hide most detailed groups */
+  .shipping-info-group,
+  .billing-info-group,
+  .order-info-group h4,
+  .order-items-list {
+    display: none;
+  }
+
+  /* 🎯 Print Shipping Label: ONLY shows shipping info */
+  #printable-order-content.print-type-shipping .shipping-info-group {
+    display: block; /* Overrides the default hide to show ONLY shipping info */
+  }
+
+  /* 📄 Print Order Details: Shows ALL relevant info */
+  #printable-order-content.print-type-order .shipping-info-group,
+  #printable-order-content.print-type-order .billing-info-group,
+  #printable-order-content.print-type-order .order-info-group h4,
+  #printable-order-content.print-type-order .order-items-list {
+    display: block; /* Overrides the default hide to show everything */
+  }
+}

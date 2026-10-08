@@ -1,0 +1,124 @@
+/* ===============================
+   PAGE
+================================ */
+.coupon-history-page {
+  max-width: 1200px;
+  margin: 40px auto;
+  padding: 0 20px;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.coupon-history-page h2 {
+  font-size: 26px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+/* ===============================
+   FILTER BAR
+================================ */
+.coupon-history-filters {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.coupon-history-filters input,
+.coupon-history-filters select {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+}
+
+.coupon-history-filters input {
+  flex: 1;
+}
+
+/* ===============================
+   TABLE
+================================ */
+.table-wrapper {
+  background: #ffffff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.coupon-history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.coupon-history-table th,
+.coupon-history-table td {
+  padding: 14px;
+  border-bottom: 1px solid #eee;
+  font-size: 14px;
+}
+
+.coupon-history-table th {
+  background: #f9fafb;
+  text-align: left;
+  font-weight: 600;
+}
+
+.coupon-history-table tr:hover {
+  background: #f8fafc;
+}
+
+/* ===============================
+   BADGES
+================================ */
+.role-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.role-badge.retailer {
+  background: #ecfeff;
+  color: #155e75;
+}
+
+.role-badge.wholesaler {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.role-badge.distributor {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.role-badge.dealer {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.role-badge.vip {
+  background: #fae8ff;
+  color: #86198f;
+}
+
+/* ===============================
+   TEXT STATES
+================================ */
+.loading-text,
+.empty-text {
+  text-align: center;
+  padding: 40px;
+  color: #6b7280;
+}
+
+.coupon-code {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.user-id {
+  font-family: monospace;
+  font-size: 13px;
+}

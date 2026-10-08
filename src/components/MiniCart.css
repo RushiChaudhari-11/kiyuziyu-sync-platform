@@ -1,0 +1,288 @@
+/* src/components/MiniCart.css */
+
+/* Variables for consistent theming */
+:root {
+  --primary-color: #5a7d7d;
+  --secondary-color: #8b6b6c;
+  --text-color: #333;
+  --light-text-color: #666;
+  --background-light: #f8f9fa;
+  --card-background: #ffffff;
+  --border-color: #e0e0e0;
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
+  --transition-speed: 0.3s;
+}
+
+/* --- Main MiniCart Container --- */
+.mini-cart-wrapper {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.mini-cart-icon {
+  position: relative;
+  color: var(--text-color);
+  z-index: 1001; /* Ensure icon is above the overlay */
+}
+
+.cart-item-count {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background-color: var(--secondary-color);
+  color: #fff;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+/* --- Dropdown Container (Initially Hidden) --- */
+.mini-cart-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 350px;
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  padding: 20px;
+  z-index: 1000;
+  transition: all var(--transition-speed) ease-in-out;
+}
+
+/* New CSS to show the dropdown when the 'open' class is present */
+.mini-cart-dropdown.open {
+  display: block;
+}
+
+/* --- Cart Header and Empty State --- */
+.mini-cart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+
+.mini-cart-header h3 {
+  margin: 0;
+  font-size: 1.5em;
+  color: var(--primary-color);
+}
+
+.mini-cart-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  color: var(--light-text-color);
+  cursor: pointer;
+}
+
+.mini-cart-empty {
+  text-align: center;
+  padding: 20px;
+}
+
+.start-shopping-btn {
+  background-color: var(--primary-color);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  text-decoration: none;
+  font-weight: bold;
+  display: inline-block;
+  margin-top: 15px;
+}
+
+/* --- Item List and Individual Item Styles --- */
+.mini-cart-items-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.mini-cart-item {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mini-cart-item:last-child {
+  border-bottom: none;
+}
+
+.mini-cart-item-image {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.mini-cart-item-details {
+  flex-grow: 1;
+}
+
+.mini-cart-item-name {
+  margin: 0;
+  font-size: 1em;
+  font-weight: bold;
+  color: var(--text-color);
+}
+
+.mini-cart-quantity-controls button {
+  background-color: var(--background-light);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mini-cart-quantity-controls span {
+  font-size: 0.9em;
+  margin: 0 8px;
+}
+
+.mini-cart-item-price-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.mini-cart-item-price {
+  margin: 0;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+.mini-cart-remove-btn {
+  background: none;
+  border: none;
+  color: #a00;
+  cursor: pointer;
+}
+
+/* --- Summary and Buttons --- */
+.mini-cart-summary {
+  padding-top: 15px;
+}
+
+.mini-cart-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.2em;
+  font-weight: bold;
+  margin-bottom: 15px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 15px;
+}
+
+.mini-cart-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.view-cart-btn, .checkout-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  text-align: center;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: bold;
+  transition: all 0.3s ease-in-out;
+}
+
+.view-cart-btn {
+  background-color: transparent;
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+}
+
+.checkout-btn {
+  background-color: var(--secondary-color);
+  color: #fff;
+}
+
+.view-cart-btn:hover {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+.checkout-btn:hover {
+  background-color: #6a4d4e;
+}
+
+/* --- Responsive Layout for Mobile Devices --- */
+@media (max-width: 768px) {
+  /* Use a more compact, centered layout for the dropdown on mobile */
+  .mini-cart-dropdown {
+    position: fixed;
+    top: 50%; /* Center vertically */
+    left: 50%; /* Center horizontally */
+    transform: translate(-50%, -50%); /* Use transform to align perfectly */
+    width: 90%; /* A fluid width that fits within the screen */
+    max-width: 400px; /* A maximum size to prevent it from getting too big on tablets */
+    border-radius: 8px;
+    padding: 20px;
+    /* Add a subtle animation for a smoother user experience */
+    transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+    opacity: 0;
+    pointer-events: none; /* Make it un-interactable when hidden */
+  }
+
+  .mini-cart-dropdown.open {
+    opacity: 1;
+    pointer-events: all; /* Make it interactable when open */
+  }
+
+  .mini-cart-header {
+    padding-bottom: 15px;
+  }
+
+  .mini-cart-item {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+    gap: 10px;
+  }
+
+  .mini-cart-item-details {
+    width: 100%;
+    text-align: left;
+  }
+
+  .mini-cart-quantity-controls {
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+  }
+  
+  .mini-cart-item-price-actions {
+    width: 100%;
+    flex-direction: row-reverse;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border-color);
+    padding-top: 10px;
+    margin-top: 10px;
+  }
+
+  /* Ensure button width is proper */
+  .view-cart-btn, .checkout-btn {
+    font-size: 1em;
+    padding: 10px;
+  }
+}

@@ -1,0 +1,147 @@
+.dropshipper-login-wrapper{
+min-height:100vh;
+display:flex;
+align-items:center;
+justify-content:center;
+background:linear-gradient(135deg,#f8f9fb,#eef2f7);
+padding:20px;
+}
+.change-password-wrapper{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#f5f7fb;
+  padding:20px;
+}
+
+.change-password-card{
+  width:100%;
+  max-width:450px;
+  background:#fff;
+  border-radius:20px;
+  padding:40px;
+  box-shadow:0 10px 40px rgba(0,0,0,.08);
+}
+
+.change-password-card h2{
+  margin-bottom:10px;
+  text-align:center;
+}
+
+.change-password-card p{
+  text-align:center;
+  color:#666;
+  margin-bottom:25px;
+}
+
+.change-password-card form{
+  display:flex;
+  flex-direction:column;
+  gap:15px;
+}
+
+.change-password-card input{
+  height:50px;
+  border:1px solid #ddd;
+  border-radius:10px;
+  padding:0 15px;
+  font-size:15px;
+}
+
+.change-password-card button{
+  height:50px;
+  border:none;
+  border-radius:10px;
+  background:#2563eb;
+  color:white;
+  font-weight:600;
+  cursor:pointer;
+}
+
+.change-password-card button:hover{
+  opacity:.9;
+}
+.dropshipper-login-card{
+width:100%;
+max-width:420px;
+background:#fff;
+padding:40px;
+border-radius:12px;
+box-shadow:0 10px 30px rgba(0,0,0,0.08);
+text-align:center;
+}
+
+.dropshipper-login-card h2{
+margin-bottom:5px;
+font-size:26px;
+font-weight:600;
+color:#222;
+}
+
+.login-subtitle{
+color:#777;
+font-size:14px;
+margin-bottom:25px;
+}
+
+.dropshipper-login-card form{
+display:flex;
+flex-direction:column;
+gap:15px;
+}
+
+.dropshipper-login-card input{
+padding:12px 14px;
+border-radius:6px;
+border:1px solid #ddd;
+font-size:14px;
+transition:all 0.2s;
+}
+
+.dropshipper-login-card input:focus{
+outline:none;
+border-color:#000;
+}
+
+.dropshipper-login-card button{
+margin-top:10px;
+padding:12px;
+border:none;
+border-radius:6px;
+background:#000;
+color:#fff;
+font-size:15px;
+font-weight:500;
+cursor:pointer;
+transition:all 0.2s;
+}
+
+.dropshipper-login-card button:hover{
+background:#333;
+}
+
+.signup-text{
+margin-top:20px;
+font-size:14px;
+color:#666;
+}
+
+.signup-text a{
+margin-left:6px;
+color:#000;
+font-weight:500;
+text-decoration:none;
+}
+
+.signup-text a:hover{
+text-decoration:underline;
+}
+
+@media(max-width:500px){
+
+.dropshipper-login-card{
+padding:30px 20px;
+}
+
+}
