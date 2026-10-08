@@ -43,6 +43,13 @@ public class ShopifyOrderWebhookService {
                 return;
             }
             
+            if (!tenantOrderRepository.acquireLock(tenantId, shopifyOrderId)) {
+                log.info("[ShopifyOrderWebhook] Order #{} for tenant {} is currently being processed by another thread, skipping...", orderNumber, tenantId);
+                return;
+            }
+            
+            String internalOrderId = UUID.randomUUID().toString();
+            
             log.info("[ShopifyOrderWebhook] Processing order #{} for tenant {}", orderNumber, tenantId);
 
             Map<String, Object> customer = (Map<String, Object>) payload.get("customer");
@@ -67,6 +74,9 @@ public class ShopifyOrderWebhookService {
             double totalPurchase = 0.0;
             double totalAdminProfitAmount = 0.0;
 
+            Map<String, Product> productCache = new java.util.HashMap<>();
+            Map<String, Boolean> productUpdated = new java.util.HashMap<>();
+
             for (Map<String, Object> item : lineItems) {
                 String sku = (String) item.get("sku");
                 if (sku == null || sku.trim().isEmpty()) {
@@ -75,12 +85,17 @@ public class ShopifyOrderWebhookService {
 
                 // Extract base product code from SKU (e.g. PRD123-1 -> PRD123)
                 String productCode = sku.split("-")[0];
-                Product kiyuziyuProduct = null;
+                Product kiyuziyuProduct = productCache.get(productCode);
                 
-                try {
-                    kiyuziyuProduct = productRepository.findById(productCode);
-                } catch (Exception e) {
-                    log.warn("Product not found for SKU: {}", sku);
+                if (kiyuziyuProduct == null) {
+                    try {
+                        kiyuziyuProduct = productRepository.findById(productCode);
+                        if (kiyuziyuProduct != null) {
+                            productCache.put(productCode, kiyuziyuProduct);
+                        }
+                    } catch (Exception e) {
+                        log.warn("Product not found for SKU: {}", sku);
+                    }
                 }
 
                 if (kiyuziyuProduct != null) {
@@ -114,10 +129,9 @@ public class ShopifyOrderWebhookService {
                     totalAdminProfitAmount += adminProfit;
 
                     // ==========================================
-                    // INVENTORY DEDUCTION LOGIC
+                    // INVENTORY DEDUCTION LOGIC (IN MEMORY)
                     // ==========================================
                     try {
-                        boolean isUpdated = false;
                         if (sku.contains("-")) {
                             int variantIdx = Integer.parseInt(sku.split("-")[1]) - 1;
                             List<Map<String, Object>> variations = kiyuziyuProduct.getVariations();
@@ -143,8 +157,8 @@ public class ShopifyOrderWebhookService {
                                 // Set the new mutable list back to the product
                                 kiyuziyuProduct.setVariations(mutableVariations);
                                 
-                                isUpdated = true;
-                                log.info("Deducted inventory for variant {}: {} -> {}", sku, currentQty, newQty);
+                                productUpdated.put(productCode, true);
+                                log.info("Deducted memory inventory for variant {}: {} -> {}", sku, currentQty, newQty);
                             }
                         } else {
                             // Main product (no variations)
@@ -155,49 +169,65 @@ public class ShopifyOrderWebhookService {
                             } catch (Exception e) {}
                             int newQty = Math.max(0, currentQty - qty);
                             kiyuziyuProduct.setQuantity(newQty);
-                            isUpdated = true;
-                            log.info("Deducted inventory for main product {}: {} -> {}", productCode, currentQty, newQty);
-                        }
-                        
-                        // Update directly in Firestore
-                        if (isUpdated) {
-                            try {
-                                Query query = firestore.collectionGroup("products").whereEqualTo("productCode", productCode).limit(1);
-                                List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
-                                if (!docs.isEmpty()) {
-                                    docs.get(0).getReference().update(
-                                            "variations", kiyuziyuProduct.getVariations(),
-                                            "quantity", kiyuziyuProduct.getQuantity()
-                                    ).get();
-                                    log.info("Firebase inventory updated for {}", productCode);
-                                }
-                            } catch (Exception ex) {
-                                log.warn("CollectionGroup query failed for {}. Falling back to iteration...", productCode);
-                                Iterable<com.google.cloud.firestore.DocumentReference> collections = firestore.collection("collections").listDocuments();
-                                boolean found = false;
-                                for (com.google.cloud.firestore.DocumentReference colRef : collections) {
-                                    Iterable<com.google.cloud.firestore.DocumentReference> subcollections = colRef.collection("subcollections").listDocuments();
-                                    for (com.google.cloud.firestore.DocumentReference subRef : subcollections) {
-                                        Query q = subRef.collection("products").whereEqualTo("productCode", productCode).limit(1);
-                                        List<QueryDocumentSnapshot> docs = q.get().get().getDocuments();
-                                        if (!docs.isEmpty()) {
-                                            docs.get(0).getReference().update(
-                                                    "variations", kiyuziyuProduct.getVariations(),
-                                                    "quantity", kiyuziyuProduct.getQuantity()
-                                            ).get();
-                                            log.info("Firebase inventory updated for {} via fallback", productCode);
-                                            found = true;
-                                            break;
-                                        }
-                                    }
-                                    if (found) break;
-                                }
-                            }
+                            productUpdated.put(productCode, true);
+                            log.info("Deducted memory inventory for main product {}: {} -> {}", productCode, currentQty, newQty);
                         }
                     } catch (Exception e) {
                         log.warn("Failed to deduct inventory for SKU {}: {}", sku, e.getMessage());
                     }
                     // ==========================================
+                }
+            }
+
+            // ==========================================
+            // BATCH UPDATE FIRESTORE
+            // ==========================================
+            for (Map.Entry<String, Product> entry : productCache.entrySet()) {
+                String productCode = entry.getKey();
+                if (productUpdated.getOrDefault(productCode, false)) {
+                    Product p = entry.getValue();
+                    try {
+                        Map<String, Object> updates = new java.util.HashMap<>();
+                        if (p.getVariations() != null && !p.getVariations().isEmpty()) {
+                            updates.put("variations", p.getVariations());
+                        } else {
+                            updates.put("quantity", p.getQuantity());
+                        }
+                        
+                        Query query = firestore.collectionGroup("products").whereEqualTo("productCode", productCode);
+                        List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
+                        if (!docs.isEmpty()) {
+                            for (QueryDocumentSnapshot doc : docs) {
+                                doc.getReference().update(updates).get();
+                            }
+                            log.info("Batch Firebase inventory updated for {}", productCode);
+                        }
+                    } catch (Exception ex) {
+                        log.warn("CollectionGroup query failed for {}. Falling back to iteration...", productCode);
+                        Iterable<com.google.cloud.firestore.DocumentReference> collections = firestore.collection("collections").listDocuments();
+                        boolean found = false;
+                        for (com.google.cloud.firestore.DocumentReference colRef : collections) {
+                            Iterable<com.google.cloud.firestore.DocumentReference> subcollections = colRef.collection("subcollections").listDocuments();
+                            for (com.google.cloud.firestore.DocumentReference subRef : subcollections) {
+                                Query q = subRef.collection("products").whereEqualTo("productCode", productCode);
+                                List<QueryDocumentSnapshot> docs = q.get().get().getDocuments();
+                                if (!docs.isEmpty()) {
+                                    Map<String, Object> fallbackUpdates = new java.util.HashMap<>();
+                                    if (p.getVariations() != null && !p.getVariations().isEmpty()) {
+                                        fallbackUpdates.put("variations", p.getVariations());
+                                    } else {
+                                        fallbackUpdates.put("quantity", p.getQuantity());
+                                    }
+                                    for (QueryDocumentSnapshot doc : docs) {
+                                        doc.getReference().update(fallbackUpdates).get();
+                                    }
+                                    log.info("Batch Firebase inventory updated for {} via fallback", productCode);
+                                    found = true;
+                                }
+                            }
+                            if (found) break;
+                        }
+                    }
                 }
             }
 
@@ -208,7 +238,7 @@ public class ShopifyOrderWebhookService {
 
             // Create and save TenantOrder
             TenantOrder order = new TenantOrder();
-            order.setOrderId(UUID.randomUUID().toString());
+            order.setOrderId(internalOrderId);
             order.setTenantId(tenantId);
             order.setShopifyOrderId(shopifyOrderId);
             order.setOrderNumber(orderNumber);

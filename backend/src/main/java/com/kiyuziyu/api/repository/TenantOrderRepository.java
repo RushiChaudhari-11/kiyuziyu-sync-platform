@@ -44,4 +44,15 @@ public class TenantOrderRepository {
             return false;
         }
     }
+
+    public boolean acquireLock(String tenantId, String shopifyOrderId) {
+        String lockId = "lock_" + tenantId + "_" + shopifyOrderId;
+        try {
+            firestore.collection("apiOrderLocks").document(lockId).create(java.util.Map.of("lockedAt", System.currentTimeMillis())).get();
+            return true;
+        } catch (Exception e) {
+            log.warn("[TenantOrderRepo] Order already locked or processed: {}", lockId);
+            return false;
+        }
+    }
 }

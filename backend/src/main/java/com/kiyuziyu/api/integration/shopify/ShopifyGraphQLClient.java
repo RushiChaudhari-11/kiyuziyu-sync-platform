@@ -597,12 +597,23 @@ public class ShopifyGraphQLClient {
                     String metafieldValue = metafieldObj != null ? (String) metafieldObj.get("value") : null;
                     List<String> nodeTags = (List<String>) node.get("tags");
 
+                    boolean hasOtherIdTag = false;
+                    if (nodeTags != null) {
+                        for (String tag : nodeTags) {
+                            if (tag.startsWith("kiyuziyu_id_") && !tag.equals("kiyuziyu_id_" + firebaseProductId.trim())) {
+                                hasOtherIdTag = true;
+                                break;
+                            }
+                        }
+                    }
+                    boolean hasOtherIdMetafield = metafieldValue != null && !metafieldValue.trim().isEmpty() && !firebaseProductId.trim().equalsIgnoreCase(metafieldValue.trim());
+
                     boolean tagMatches = nodeTags != null && (
                             nodeTags.contains("kiyuziyu_id_" + firebaseProductId.trim()) ||
-                            (productCode != null && (nodeTags.contains("kiyuziyu_code_" + productCode.trim()) || nodeTags.contains("kiyuziyu_id_" + productCode.trim())))
+                            (productCode != null && (nodeTags.contains("kiyuziyu_code_" + productCode.trim()) || nodeTags.contains("kiyuziyu_id_" + productCode.trim())) && !hasOtherIdTag)
                     );
                     boolean metafieldMatches = firebaseProductId.trim().equalsIgnoreCase(metafieldValue != null ? metafieldValue.trim() : null) ||
-                            (productCode != null && productCode.trim().equalsIgnoreCase(metafieldValue != null ? metafieldValue.trim() : null));
+                            (productCode != null && productCode.trim().equalsIgnoreCase(metafieldValue != null ? metafieldValue.trim() : null) && !hasOtherIdMetafield);
                     boolean titleMatches = title != null && !title.trim().isEmpty() &&
                             nodeTitle != null && nodeTitle.trim().equalsIgnoreCase(title.trim());
 

@@ -20,8 +20,10 @@ public class ShopifyWebhookController {
             @RequestParam("tenantId") String tenantId,
             @RequestBody Map<String, Object> payload) {
         
-        // Return 200 OK so Shopify knows we received it successfully
-        orderWebhookService.processOrderWebhook(tenantId, payload);
+        // Process asynchronously so Shopify gets 200 OK immediately and doesn't retry
+        new Thread(() -> {
+            orderWebhookService.processOrderWebhook(tenantId, payload);
+        }).start();
         
         return ResponseEntity.ok("Webhook received");
     }
