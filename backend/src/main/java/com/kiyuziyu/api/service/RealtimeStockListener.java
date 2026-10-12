@@ -3,12 +3,10 @@ package com.kiyuziyu.api.service;
 import com.google.cloud.firestore.DocumentChange;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.QueryDocumentSnapshot;
-import com.kiyuziyu.api.model.ShopifyConnection;
 import com.kiyuziyu.api.model.ShopifyProductMapping;
 import com.kiyuziyu.api.model.SyncJob;
 import com.kiyuziyu.api.model.SyncJobStatus;
 import com.kiyuziyu.api.model.SyncJobType;
-import com.kiyuziyu.api.repository.ShopifyConnectionRepository;
 import com.kiyuziyu.api.repository.ShopifyProductMappingRepository;
 import com.kiyuziyu.api.repository.SyncJobRepository;
 import org.slf4j.Logger;
@@ -30,9 +28,6 @@ public class RealtimeStockListener {
 
     @Autowired
     private ShopifyProductMappingRepository mappingRepository;
-
-    @Autowired
-    private ShopifyConnectionRepository shopifyConnectionRepository;
 
     @Autowired
     private SyncJobRepository syncJobRepository;
@@ -72,30 +67,11 @@ public class RealtimeStockListener {
         
         log.info("[RealtimeStockListener] Handling stock update for productId={}, productCode={}", productId, productCode);
 
-        // Get all tenants who have mapped this product
+        // Only sync products that have already been mapped/synced by tenants to their Shopify stores
         List<ShopifyProductMapping> mappings = getMappingsForProduct(productId, productCode);
         
         if (mappings.isEmpty()) {
-            log.info("[RealtimeStockListener] No mappings found for productId={}, productCode={}. Checking connected stores...", productId, productCode);
-            // Fallback: check all currently connected Shopify stores
-            List<ShopifyConnection> connections = shopifyConnectionRepository.findAllConnected();
-            for (ShopifyConnection conn : connections) {
-                String tenantId = conn.getTenantId();
-                String storeId = conn.getStoreId();
-                if (tenantId != null && storeId != null) {
-                    ShopifyProductMapping m = new ShopifyProductMapping();
-                    m.setTenantId(tenantId);
-                    m.setStoreId(storeId);
-                    m.setConnectionId(conn.getConnectionId());
-                    m.setProductId(productId);
-                    m.setProductCode(productCode);
-                    mappings.add(m);
-                }
-            }
-        }
-
-        if (mappings.isEmpty()) {
-            log.info("[RealtimeStockListener] No active Shopify stores found. Nothing to sync.");
+            log.info("[RealtimeStockListener] Product {} (code={}) is not synced to any Shopify store yet. Skipping auto-sync until explicitly synced by tenant.", productId, productCode);
             return;
         }
 
