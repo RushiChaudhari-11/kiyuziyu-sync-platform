@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getIdToken } from '../pages/API_ADMIN/adminAuth';
+import { getIdToken, API_BASE } from '../pages/API_ADMIN/adminAuth';
 import { auth } from '../firebase';
 
 export default function ShopifyOAuthHandler() {
@@ -38,8 +38,6 @@ export default function ShopifyOAuthHandler() {
           sessionStorage.setItem('shopify_oauth_initiated', cleanShop);
           sessionStorage.removeItem('shopify_pending_shop');
 
-          // NOTE: Change this to your ngrok URL for local testing (e.g., const API_BASE = "https://your-ngrok-url.ngrok.app";)
-          const API_BASE = "https://kiyuziyu-api-703805908757.asia-south1.run.app";
           const response = await fetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${encodeURIComponent(cleanShop)}`, {
             headers: { 
               'Authorization': `Bearer ${token}`
@@ -66,7 +64,6 @@ export default function ShopifyOAuthHandler() {
             sessionStorage.setItem('shopify_oauth_initiated', pendingShop);
             sessionStorage.removeItem('shopify_pending_shop');
             
-            const API_BASE = "https://kiyuziyu-api-703805908757.asia-south1.run.app";
             const response = await fetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${encodeURIComponent(pendingShop)}`, {
               headers: { 
                 'Authorization': `Bearer ${token}`

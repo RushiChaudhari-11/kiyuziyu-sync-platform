@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { getUserSession, adminSignOut, getIdToken } from './adminAuth';
+import { getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
 import LogoImage from '../../assets/logoj2.png';
 import TenantOrders from './TenantOrders';
 
@@ -28,8 +28,6 @@ export default function TenantDashboard() {
     setShopifyLoading(true);
     setShopifyError('');
     try {
-      const token = await getIdToken();
-      const API_BASE = "https://kiyuziyu-api-703805908757.asia-south1.run.app";
       const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         headers: { 
           'Authorization': `Bearer ${token}`
@@ -151,7 +149,6 @@ export default function TenantDashboard() {
       setSubmitting(true);
       const token = await getIdToken();
       
-      const API_BASE = "https://kiyuziyu-api-703805908757.asia-south1.run.app";
       const res = await fetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${validation.domain}`, {
         method: 'GET',
         headers: {
@@ -181,8 +178,6 @@ export default function TenantDashboard() {
     setShopifySuccess('');
 
     try {
-      const token = await getIdToken();
-      const API_BASE = "https://kiyuziyu-api-703805908757.asia-south1.run.app";
       const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         method: 'DELETE',
         headers: {

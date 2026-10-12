@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { getAdminProfile, getUserSession, adminSignOut, getIdToken } from './adminAuth';
+import { getAdminProfile, getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
 import LogoImage from '../../assets/logoj2.png';
 import TenantOrders from './TenantOrders';
 import { ROLE_CONFIG } from '../../config/roles';
@@ -36,7 +36,7 @@ export default function AdminDashboard() {
     setLoadingTenants(true);
     try {
       const token = await getIdToken();
-      const res = await fetch('https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/admin/tenants', {
+      const res = await fetch(`${API_BASE}/api/v1/admin/tenants`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -106,7 +106,7 @@ export default function AdminDashboard() {
     setIsSubmitting(true);
     try {
       const token = await getIdToken();
-      const res = await fetch('https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/admin/tenants', {
+      const res = await fetch(`${API_BASE}/api/v1/admin/tenants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

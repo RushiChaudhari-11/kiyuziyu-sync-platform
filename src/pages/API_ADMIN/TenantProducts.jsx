@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { getUserSession, adminSignOut, getIdToken } from './adminAuth';
+import { getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
 import LogoImage from '../../assets/logoj2.png';
 
 export default function TenantProducts() {
@@ -60,7 +60,7 @@ export default function TenantProducts() {
   const fetchShopifyConnection = useCallback(async () => {
     try {
       const token = await getIdToken();
-      const res = await fetch('https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/tenants/me/shopify-connection', {
+      const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -79,7 +79,7 @@ export default function TenantProducts() {
   const fetchCollections = useCallback(async () => {
     try {
       const token = await getIdToken();
-      const res = await fetch('https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/tenants/me/products/collections', {
+      const res = await fetch(`${API_BASE}/api/v1/tenants/me/products/collections`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -96,7 +96,7 @@ export default function TenantProducts() {
   const fetchSyncStatus = useCallback(async () => {
     try {
       const token = await getIdToken();
-      const res = await fetch('https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/tenants/me/products/sync-status', {
+      const res = await fetch(`${API_BASE}/api/v1/tenants/me/products/sync-status`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -118,7 +118,7 @@ export default function TenantProducts() {
     setProductsLoading(true);
     try {
       const token = await getIdToken();
-      let url = `https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/tenants/me/products?limit=${itemsPerPage}&page=${currentPage}`;
+      let url = `${API_BASE}/api/v1/tenants/me/products?limit=${itemsPerPage}&page=${currentPage}`;
       if (selectedCollection) {
         url += `&collectionId=${encodeURIComponent(selectedCollection)}`;
       }
@@ -193,7 +193,7 @@ export default function TenantProducts() {
     const syncedIds = Array.from(selectedProductIds);
     try {
       const token = await getIdToken();
-      const res = await fetch('https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/tenants/me/products/sync', {
+      const res = await fetch(`${API_BASE}/api/v1/tenants/me/products/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -219,7 +219,7 @@ export default function TenantProducts() {
               return;
             }
             const t = await getIdToken();
-            const sr = await fetch('https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/tenants/me/products/sync-status', {
+            const sr = await fetch(`${API_BASE}/api/v1/tenants/me/products/sync-status`, {
               headers: { Authorization: `Bearer ${t}` },
             });
             if (sr.ok) {
@@ -282,7 +282,7 @@ export default function TenantProducts() {
   const savePriceToBackend = async (productCode, newPrice) => {
     try {
       const token = await getIdToken();
-      await fetch(`https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/tenants/me/products/${encodeURIComponent(productCode)}/price`, {
+      await fetch(`${API_BASE}/api/v1/tenants/me/products/${encodeURIComponent(productCode)}/price`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ sellingPrice: newPrice })
