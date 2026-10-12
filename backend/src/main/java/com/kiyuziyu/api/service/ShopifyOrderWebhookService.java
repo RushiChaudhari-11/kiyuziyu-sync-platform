@@ -55,11 +55,37 @@ public class ShopifyOrderWebhookService {
             Map<String, Object> customer = (Map<String, Object>) payload.get("customer");
             String customerName = "Unknown";
             String customerEmail = "";
+            String customerPhone = "";
             if (customer != null) {
                 String fName = (String) customer.get("first_name");
                 String lName = (String) customer.get("last_name");
                 customerName = (fName != null ? fName : "") + " " + (lName != null ? lName : "");
                 customerEmail = (String) customer.get("email");
+                if (customer.get("phone") != null) {
+                    customerPhone = String.valueOf(customer.get("phone"));
+                }
+            }
+            if ((customerPhone == null || customerPhone.isEmpty()) && payload.get("phone") != null) {
+                customerPhone = String.valueOf(payload.get("phone"));
+            }
+
+            String shippingAddressStr = "";
+            Map<String, Object> shippingAddress = (Map<String, Object>) payload.get("shipping_address");
+            if (shippingAddress == null) {
+                shippingAddress = (Map<String, Object>) payload.get("billing_address");
+            }
+            if (shippingAddress != null) {
+                if ((customerPhone == null || customerPhone.isEmpty()) && shippingAddress.get("phone") != null) {
+                    customerPhone = String.valueOf(shippingAddress.get("phone"));
+                }
+                List<String> addrParts = new ArrayList<>();
+                if (shippingAddress.get("address1") != null) addrParts.add(String.valueOf(shippingAddress.get("address1")));
+                if (shippingAddress.get("address2") != null) addrParts.add(String.valueOf(shippingAddress.get("address2")));
+                if (shippingAddress.get("city") != null) addrParts.add(String.valueOf(shippingAddress.get("city")));
+                if (shippingAddress.get("province") != null) addrParts.add(String.valueOf(shippingAddress.get("province")));
+                if (shippingAddress.get("zip") != null) addrParts.add(String.valueOf(shippingAddress.get("zip")));
+                if (shippingAddress.get("country") != null) addrParts.add(String.valueOf(shippingAddress.get("country")));
+                shippingAddressStr = String.join(", ", addrParts);
             }
 
             List<Map<String, Object>> lineItems = (List<Map<String, Object>>) payload.get("line_items");
@@ -250,7 +276,12 @@ public class ShopifyOrderWebhookService {
             order.setTotalPurchasePrice(totalPurchase);
             order.setTotalAdminProfit(totalAdminProfitAmount);
             order.setItems(kiyuziyuItems);
-            order.setStatus("NEW");
+            order.setCustomerPhone(customerPhone);
+            order.setShippingAddress(shippingAddressStr);
+
+            String financialStatus = payload.get("financial_status") != null ? String.valueOf(payload.get("financial_status")) : "";
+            String initialStatus = "paid".equalsIgnoreCase(financialStatus) ? "Payment Done" : "Pending Payment";
+            order.setStatus(initialStatus);
             order.setCreatedAt(Instant.now().toString());
 
             tenantOrderRepository.save(order);

@@ -10,14 +10,17 @@ public class TenantOrder {
     private String orderNumber;
     private String customerName;
     private String customerEmail;
+    private String customerPhone;
+    private String shippingAddress;
     private Double totalBasePrice;
     private Double totalSellingPrice;
     private Double totalProfit;
     private Double totalPurchasePrice;
     private Double totalAdminProfit;
     private List<TenantOrderItem> items;
-    private String status; // e.g. "NEW", "PROCESSING", "COMPLETED"
+    private String status; // e.g. "Pending Payment", "Payment Done", etc.
     private String createdAt;
+    private String updatedAt;
 
     public TenantOrder() {}
 
@@ -60,9 +63,18 @@ public class TenantOrder {
     public List<TenantOrderItem> getItems() { return items; }
     public void setItems(List<TenantOrderItem> items) { this.items = items; }
 
+    public String getCustomerPhone() { return customerPhone; }
+    public void setCustomerPhone(String customerPhone) { this.customerPhone = customerPhone; }
+
+    public String getShippingAddress() { return shippingAddress; }
+    public void setShippingAddress(String shippingAddress) { this.shippingAddress = shippingAddress; }
+
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
+
+    public String getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
 }
