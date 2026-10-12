@@ -28,6 +28,7 @@ export default function TenantDashboard() {
     setShopifyLoading(true);
     setShopifyError('');
     try {
+      const token = await getIdToken();
       const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         headers: { 
           'Authorization': `Bearer ${token}`
@@ -178,6 +179,7 @@ export default function TenantDashboard() {
     setShopifySuccess('');
 
     try {
+      const token = await getIdToken();
       const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         method: 'DELETE',
         headers: {
