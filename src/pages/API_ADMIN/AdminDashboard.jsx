@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { getAdminProfile, getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
+import { getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
 import LogoImage from '../../assets/logoj2.png';
 import TenantOrders from './TenantOrders';
 import { ROLE_CONFIG } from '../../config/roles';
@@ -12,6 +12,7 @@ export default function AdminDashboard() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Tenant state
   const [tenants, setTenants] = useState([]);
@@ -29,8 +30,20 @@ export default function AdminDashboard() {
   const [apiKeyNotice, setApiKeyNotice] = useState('');
   const [formNotice, setFormNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
 
   const navigate = useNavigate();
+
+  const handleCopyText = (text, fieldName) => {
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (e) {
+      console.error('Copy failed:', e);
+    }
+  };
 
   const fetchTenants = async () => {
     setLoadingTenants(true);
@@ -180,21 +193,59 @@ export default function AdminDashboard() {
 
   return (
     <div style={s.dashboardLayout}>
+      {/* Floating Tab to Open Sidebar (When Collapsed) */}
+      {!sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          style={s.tabToOpenBtn}
+          title="Open Menu"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+          <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.03em' }}>Tab to Open Menu</span>
+        </button>
+      )}
+
       {/* SIDEBAR */}
-      <aside style={s.sidebar}>
+      <aside style={{
+        ...s.sidebar,
+        width: sidebarOpen ? '260px' : '0px',
+        padding: sidebarOpen ? '24px 16px' : '0px',
+        borderRight: sidebarOpen ? '1px solid #e2e8f0' : 'none',
+        overflow: 'hidden',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        visibility: sidebarOpen ? 'visible' : 'hidden',
+        boxShadow: sidebarOpen ? '2px 0 8px rgba(0,0,0,0.03)' : 'none',
+      }}>
         {/* Brand */}
         <div style={s.sidebarBrand}>
-          <div style={s.brandBadge}>
-            <img
-              src={LogoImage}
-              alt="Kiyuziyu"
-              style={s.brandLogoImg}
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
-          </div>
-          <div>
-            <h2 style={s.brandName}>KIYUZIYU</h2>
-            <span style={s.superAdminTag}>SUPER ADMIN</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={s.brandBadge}>
+                <img
+                  src={LogoImage}
+                  alt="Kiyuziyu"
+                  style={s.brandLogoImg}
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              </div>
+              <div>
+                <h2 style={s.brandName}>KIYUZIYU</h2>
+                <span style={s.superAdminTag}>SUPER ADMIN</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              style={s.sidebarCloseBtn}
+              title="Collapse Menu"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -232,6 +283,35 @@ export default function AdminDashboard() {
             Tenants
           </button>
 
+          <button
+            onClick={() => setActiveTab('orders')}
+            style={{
+              ...s.navItem,
+              ...(activeTab === 'orders' ? s.navItemActive : {}),
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
+            Orders
+          </button>
+
+          <button
+            onClick={() => setActiveTab('account')}
+            style={{
+              ...s.navItem,
+              ...(activeTab === 'account' ? s.navItemActive : {}),
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            Account
+          </button>
+
           <div style={s.navDivider} />
 
           {/* Disabled Modules */}
@@ -251,25 +331,15 @@ export default function AdminDashboard() {
             <span>Inventory</span>
             <span style={s.soonBadge}>Soon</span>
           </div>
-          <button
-            onClick={() => setActiveTab('orders')}
-            style={{
-              ...s.navItem,
-              ...(activeTab === 'orders' ? s.navItemActive : {}),
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="9" cy="21" r="1" />
-              <circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            </svg>
-            Orders
-          </button>
         </nav>
 
         {/* Sidebar Footer / Profile */}
         <div style={s.sidebarFooter}>
-          <div style={s.adminProfile}>
+          <div
+            onClick={() => setActiveTab('account')}
+            style={{ ...s.adminProfile, cursor: 'pointer' }}
+            title="View Account Details"
+          >
             <div style={s.avatarCircle}>
               {(profile?.name || user?.email || 'A')[0].toUpperCase()}
             </div>
@@ -293,11 +363,25 @@ export default function AdminDashboard() {
       <main style={s.mainContent}>
         {/* Header */}
         <header style={s.mainHeader}>
-          <div>
-            <h1 style={s.headerTitle}>Super Admin Dashboard</h1>
-            <p style={s.headerSubtitle}>
-              Manage tenants, API access and platform configuration.
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              style={s.headerMenuToggleBtn}
+              title={sidebarOpen ? "Hide Menu" : "Open Menu"}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+              <span>{sidebarOpen ? 'Hide Menu' : 'Open Menu'}</span>
+            </button>
+            <div>
+              <h1 style={s.headerTitle}>Super Admin Dashboard</h1>
+              <p style={s.headerSubtitle}>
+                Manage tenants, API access and platform configuration.
+              </p>
+            </div>
           </div>
           <button onClick={() => setIsModalOpen(true)} style={s.primaryBtn}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -393,8 +477,216 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === 'orders' && (
-          <div style={{ padding: '20px 0' }}>
-            <TenantOrders isAdmin={true} />
+          <div style={{ padding: '20px 0', width: '100%' }}>
+            <TenantOrders isAdmin={true} tenants={tenants} />
+          </div>
+        )}
+
+        {activeTab === 'account' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1000px', width: '100%', padding: '12px 0 32px' }}>
+            {/* Top Profile Banner */}
+            <div style={{
+              backgroundColor: '#fff',
+              borderRadius: '16px',
+              border: '1px solid #e2e8f0',
+              padding: '24px 28px',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '16px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+                <div style={{
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                  border: '1.5px solid #d4af37',
+                  color: '#b89620',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '24px',
+                  fontWeight: '800',
+                  boxShadow: '0 4px 12px rgba(212,175,55,0.18)'
+                }}>
+                  {(profile?.name || user?.email || 'A')[0].toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#0f172a' }}>
+                      {profile?.name || 'Super Admin'}
+                    </h2>
+                    <span style={{
+                      padding: '3px 10px',
+                      borderRadius: '12px',
+                      backgroundColor: '#fef3c7',
+                      color: '#b89620',
+                      border: '1px solid #fde68a',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      letterSpacing: '0.04em'
+                    }}>
+                      {profile?.role || 'SUPER_ADMIN'}
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '13.5px', color: '#64748b' }}>
+                    {user?.email}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  backgroundColor: '#ecfdf5',
+                  color: '#059669',
+                  border: '1px solid #a7f3d0',
+                  fontSize: '12px',
+                  fontWeight: '700'
+                }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
+                  Platform Administrator
+                </span>
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    backgroundColor: '#fef2f2',
+                    color: '#dc2626',
+                    border: '1px solid #fecaca',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+
+            {/* Information Grid Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '20px' }}>
+              {/* Card 1: Identity & Authorization */}
+              <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '22px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                  </svg>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>
+                    Admin Credentials & Access
+                  </h3>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Admin Full Name</span>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a', marginTop: '2px' }}>{profile?.name || 'Super Admin'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Admin Email</span>
+                    <div style={{ fontSize: '13.5px', color: '#0f172a', marginTop: '2px' }}>{user?.email}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Firebase UID</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
+                      <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#475569', wordBreak: 'break-all' }}>
+                        {user?.uid}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(user?.uid, 'uid')}
+                        style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#475569', cursor: 'pointer', flexShrink: 0 }}
+                      >
+                        {copiedField === 'uid' ? '✓ Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Access Level</span>
+                    <div style={{ fontSize: '13px', color: '#b89620', fontWeight: '700', marginTop: '2px' }}>
+                      {profile?.role || 'SUPER_ADMIN'} (Root Administration Scope)
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Platform Scope & Statistics */}
+              <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '22px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d4af37" strokeWidth="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                  </svg>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>
+                    Platform Scope & Resources
+                  </h3>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Total Managed Tenants</span>
+                    <div style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a', marginTop: '2px' }}>
+                      {totalCount !== null ? totalCount : tenants.length} Registered Tenants
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Backend REST Services</span>
+                    <div style={{ fontSize: '13px', color: '#334155', marginTop: '2px' }}>
+                      Spring Boot Java API (`/api/v1/admin`)
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Administrative Privileges</span>
+                    <div style={{ fontSize: '12.5px', color: '#059669', fontWeight: '600', marginTop: '2px', lineHeight: 1.4 }}>
+                      ✓ Create & provision Tenants<br />
+                      ✓ Generate API Client credentials<br />
+                      ✓ Real-time multi-tenant Orders oversight
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Security & Session Metadata */}
+              <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '22px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>
+                    Security & Session Details
+                  </h3>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Auth Provider</span>
+                    <div style={{ fontSize: '13px', color: '#0f172a', fontWeight: '600', marginTop: '2px' }}>
+                      Firebase Authentication (ID Token Bearer)
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Account Created</span>
+                    <div style={{ fontSize: '12.5px', color: '#475569', marginTop: '2px' }}>
+                      {user?.metadata?.creationTime || 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Last Sign-In</span>
+                    <div style={{ fontSize: '12.5px', color: '#475569', marginTop: '2px' }}>
+                      {user?.metadata?.lastSignInTime || 'Active Session'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -661,13 +953,21 @@ const s = {
   },
   dashboardLayout: {
     display: 'flex',
+    height: '100vh',
+    maxHeight: '100vh',
     minHeight: '100vh',
+    overflow: 'hidden',
     backgroundColor: '#f8fafc',
     color: '#0f172a',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
   },
   sidebar: {
     width: '260px',
+    height: '100vh',
+    maxHeight: '100vh',
+    position: 'sticky',
+    top: 0,
+    left: 0,
     backgroundColor: '#ffffff',
     borderRight: '1px solid #e2e8f0',
     boxShadow: '4px 0 24px rgba(15,23,42,0.02)',
@@ -677,6 +977,28 @@ const s = {
     padding: '24px 16px',
     boxSizing: 'border-box',
     flexShrink: 0,
+    overflowY: 'auto',
+  },
+  tabToOpenBtn: {
+    position: 'fixed',
+    top: '24px',
+    left: '0px',
+    zIndex: 9999,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 16px 10px 12px',
+    backgroundColor: '#0f172a',
+    color: '#f8fafc',
+    border: '1px solid #334155',
+    borderLeft: 'none',
+    borderRadius: '0 10px 10px 0',
+    boxShadow: '0 4px 16px rgba(15, 23, 42, 0.25)',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: '700',
+    letterSpacing: '0.04em',
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
   },
   sidebarBrand: {
     display: 'flex',
@@ -684,6 +1006,33 @@ const s = {
     gap: '12px',
     marginBottom: '32px',
     paddingLeft: '8px',
+  },
+  sidebarCloseBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '6px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'color 0.15s ease',
+  },
+  headerMenuToggleBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 14px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+    color: '#334155',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+    transition: 'all 0.15s ease',
   },
   brandBadge: {
     width: '40px',
@@ -824,8 +1173,12 @@ const s = {
   },
   mainContent: {
     flex: 1,
-    padding: '36px 40px',
+    height: '100vh',
+    padding: '28px 36px',
     overflowY: 'auto',
+    minWidth: 0,
+    width: '100%',
+    boxSizing: 'border-box',
   },
   mainHeader: {
     display: 'flex',

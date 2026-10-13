@@ -11,6 +11,7 @@ export default function TenantDashboard() {
   const [tenantProfile, setTenantProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Shopify Connection State
   const [shopifyConn, setShopifyConn] = useState(null);
@@ -20,8 +21,20 @@ export default function TenantDashboard() {
   const [shopifySuccess, setShopifySuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
 
   const navigate = useNavigate();
+
+  const handleCopyText = (text, fieldName) => {
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (e) {
+      console.error('Failed to copy to clipboard:', e);
+    }
+  };
 
   // Fetch Shopify Connection for current tenant
   const fetchShopifyConnection = useCallback(async () => {
@@ -63,6 +76,10 @@ export default function TenantDashboard() {
     const tabParam = params.get('tab');
     if (tabParam === 'shopify') {
       setActiveTab('shopify');
+    } else if (tabParam === 'orders') {
+      setActiveTab('orders');
+    } else if (tabParam === 'account') {
+      setActiveTab('account');
     }
     if (shopifyParam === 'connected') {
       setShopifySuccess('Shopify store connected successfully!');
@@ -229,12 +246,279 @@ export default function TenantDashboard() {
 
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'grid', functional: true, path: '/tenant/dashboard' },
+    { id: 'orders', label: 'Orders', icon: 'shopping-cart', functional: true, path: '/tenant/dashboard?tab=orders' },
     { id: 'shopify', label: 'Shopify Store', icon: 'shopping-bag', functional: true, path: '/tenant/dashboard?tab=shopify' },
+    { id: 'account', label: 'Account', icon: 'user', functional: true, path: '/tenant/dashboard?tab=account' },
     { id: 'products', label: 'Products', icon: 'package', functional: true, path: '/tenant/products' },
     { id: 'credentials', label: 'API Credentials', icon: 'key', functional: false },
-    { id: 'orders', label: 'Orders', icon: 'shopping-cart', functional: true, path: '/tenant/dashboard?tab=orders' },
-    { id: 'profile', label: 'Profile', icon: 'user', functional: false },
   ];
+
+  // Render Account Profile & System Details View
+  const renderAccountView = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Account Profile Header Box */}
+      <div style={{
+        backgroundColor: '#fff',
+        borderRadius: '16px',
+        border: '1px solid #e2e8f0',
+        padding: '24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '20px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #b89620 0%, #d4af37 100%)',
+            color: '#fff',
+            fontSize: '24px',
+            fontWeight: '700',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(184, 150, 32, 0.25)'
+          }}>
+            {(userName.charAt(0) || 'T').toUpperCase()}
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#0f172a' }}>
+                {userName}
+              </h2>
+              <span style={{
+                padding: '3px 10px',
+                borderRadius: '12px',
+                backgroundColor: '#fef3c7',
+                color: '#b89620',
+                border: '1px solid #fde68a',
+                fontSize: '11px',
+                fontWeight: '700',
+                letterSpacing: '0.04em'
+              }}>
+                {roleLabel}
+              </span>
+            </div>
+            <p style={{ margin: '4px 0 0', fontSize: '13.5px', color: '#64748b' }}>
+              {userEmail}
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 14px',
+            borderRadius: '20px',
+            backgroundColor: '#ecfdf5',
+            color: '#059669',
+            border: '1px solid #a7f3d0',
+            fontSize: '12px',
+            fontWeight: '700'
+          }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
+            {tenantProfile?.status || 'ACTIVE'}
+          </span>
+          <button
+            onClick={handleLogout}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              backgroundColor: '#fef2f2',
+              color: '#dc2626',
+              border: '1px solid #fecaca',
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+
+      {/* Information Cards Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '20px' }}>
+        {/* Card 1: Tenant Identity & Organization */}
+        <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '22px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b89620" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>
+              Tenant Profile & Identity
+            </h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Organization / Store</span>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a', marginTop: '2px' }}>{userName}</div>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Tenant Code</span>
+              <div style={{ fontSize: '13.5px', color: '#0f172a', marginTop: '2px', fontFamily: 'monospace' }}>
+                {tenantProfile?.code || 'N/A'}
+              </div>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Assigned Tenant ID</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
+                <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#0f172a', fontWeight: '600', wordBreak: 'break-all' }}>
+                  {tenantId}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(tenantId, 'tenantId')}
+                  style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#475569', cursor: 'pointer', flexShrink: 0 }}
+                >
+                  {copiedField === 'tenantId' ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Firebase User UID</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
+                <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#475569', wordBreak: 'break-all' }}>
+                  {user?.uid}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(user?.uid, 'uid')}
+                  style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#475569', cursor: 'pointer', flexShrink: 0 }}
+                >
+                  {copiedField === 'uid' ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Shopify Integration Details */}
+        <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '22px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#95bf47" strokeWidth="2">
+              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <path d="M16 10a4 4 0 0 1-8 0" />
+            </svg>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>
+              Shopify Store Integration
+            </h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Connection Status</span>
+              <div style={{ marginTop: '4px' }}>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 10px',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  backgroundColor: isConnected ? '#ecfdf5' : '#fef2f2',
+                  color: isConnected ? '#059669' : '#dc2626',
+                  border: isConnected ? '1px solid #a7f3d0' : '1px solid #fecaca'
+                }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isConnected ? '#10b981' : '#dc2626' }}></span>
+                  {isConnected ? 'STORE CONNECTED' : 'NOT CONNECTED'}
+                </span>
+              </div>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Linked Shopify Domain</span>
+              <div style={{ fontSize: '13.5px', color: '#0f172a', fontWeight: '600', marginTop: '2px', wordBreak: 'break-all' }}>
+                {shopifyConn?.shopDomain || 'No Shopify store linked'}
+              </div>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Sync Scope / Permissions</span>
+              <div style={{ fontSize: '12.5px', color: '#475569', marginTop: '2px' }}>
+                {shopifyConn?.scope || (isConnected ? 'read_orders, write_orders, read_products' : 'None')}
+              </div>
+            </div>
+            <div style={{ marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('shopify')}
+                style={{
+                  padding: '7px 14px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  borderRadius: '6px',
+                  backgroundColor: '#f1f5f9',
+                  color: '#1e293b',
+                  border: '1px solid #cbd5e1',
+                  cursor: 'pointer'
+                }}
+              >
+                {isConnected ? 'Manage Shopify Store →' : 'Connect Shopify Store →'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Security & Session Details */}
+        <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e2e8f0', padding: '22px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>
+              Security & Session Details
+            </h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Auth Provider</span>
+              <div style={{ fontSize: '13px', color: '#334155', marginTop: '2px', textTransform: 'capitalize' }}>
+                {user?.providerData?.[0]?.providerId || 'password'} authentication
+              </div>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Account Created</span>
+              <div style={{ fontSize: '13px', color: '#334155', marginTop: '2px' }}>
+                {user?.metadata?.creationTime ? new Date(user.metadata.creationTime).toLocaleString() : 'N/A'}
+              </div>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Last Sign-in</span>
+              <div style={{ fontSize: '13px', color: '#334155', marginTop: '2px' }}>
+                {user?.metadata?.lastSignInTime ? new Date(user.metadata.lastSignInTime).toLocaleString() : 'N/A'}
+              </div>
+            </div>
+            <div style={{ marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('orders')}
+                style={{
+                  padding: '7px 14px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  borderRadius: '6px',
+                  backgroundColor: '#f1f5f9',
+                  color: '#1e293b',
+                  border: '1px solid #cbd5e1',
+                  cursor: 'pointer'
+                }}
+              >
+                View Store Orders →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   // Render Shopify Store Card Component
   const renderShopifyCard = () => (
@@ -396,22 +680,60 @@ export default function TenantDashboard() {
 
   return (
     <div style={s.appLayout}>
+      {/* Floating Tab to Open Sidebar (When Collapsed) */}
+      {!sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          style={s.tabToOpenBtn}
+          title="Open Menu"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+          <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.03em' }}>Tab to Open Menu</span>
+        </button>
+      )}
+
       {/* Sidebar */}
-      <aside style={s.sidebar}>
+      <aside style={{
+        ...s.sidebar,
+        width: sidebarOpen ? '260px' : '0px',
+        padding: sidebarOpen ? '24px 16px' : '0px',
+        borderRight: sidebarOpen ? '1px solid #e2e8f0' : 'none',
+        overflowY: sidebarOpen ? 'auto' : 'hidden',
+        overflowX: 'hidden',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        visibility: sidebarOpen ? 'visible' : 'hidden',
+        boxShadow: sidebarOpen ? '2px 0 8px rgba(0,0,0,0.03)' : 'none',
+      }}>
         {/* Brand */}
         <div style={s.sidebarBrand}>
-          <div style={s.logoBadge}>
-            <img
-              src={LogoImage}
-              alt="Kiyuziyu"
-              style={s.logoImg}
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={s.logoBadge}>
+              <img
+                src={LogoImage}
+                alt="Kiyuziyu"
+                style={s.logoImg}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            </div>
+            <div>
+              <h2 style={s.brandName}>KIYUZIYU</h2>
+              <span style={s.roleBadge}>{roleLabel}</span>
+            </div>
           </div>
-          <div>
-            <h2 style={s.brandName}>KIYUZIYU</h2>
-            <span style={s.roleBadge}>{roleLabel}</span>
-          </div>
+          {/* Collapse Button */}
+          <button
+            onClick={() => setSidebarOpen(false)}
+            style={s.sidebarCloseBtn}
+            title="Collapse Sidebar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
         </div>
 
         {/* Navigation */}
@@ -453,7 +775,20 @@ export default function TenantDashboard() {
         </nav>
 
         {/* User Footer */}
-        <div style={s.userFooter}>
+        <div
+          onClick={() => setActiveTab('account')}
+          style={{
+            ...s.userFooter,
+            cursor: 'pointer',
+            borderRadius: '10px',
+            transition: 'background-color 0.15s, border-color 0.15s',
+            backgroundColor: activeTab === 'account' ? '#f8fafc' : 'transparent',
+            border: activeTab === 'account' ? '1px solid #d4af37' : '1px solid transparent',
+            padding: '8px',
+            marginBottom: '4px'
+          }}
+          title="Click to view Account details"
+        >
           <div style={s.userInfo}>
             <div style={s.userAvatar}>
               {(userName.charAt(0) || 'T').toUpperCase()}
@@ -463,7 +798,7 @@ export default function TenantDashboard() {
               <div style={s.userEmailText}>{userEmail}</div>
             </div>
           </div>
-          <button onClick={handleLogout} style={s.logoutBtn} title="Sign Out">
+          <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} style={s.logoutBtn} title="Sign Out">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16 17 21 12 16 7" />
@@ -479,13 +814,29 @@ export default function TenantDashboard() {
         <div style={s.container}>
           {/* Header */}
           <header style={s.header}>
-            <div>
-              <h1 style={s.pageTitle}>
-                {activeTab === 'shopify' ? 'Shopify Integration' : 'Tenant Dashboard'}
-              </h1>
-              <p style={s.pageSubtitle}>
-                Welcome back, <strong>{userName}</strong>. Manage your store tenant settings and API configurations.
-              </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                style={s.headerMenuToggleBtn}
+                title={sidebarOpen ? "Collapse Menu" : "Open Menu"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="3" y1="12" x2="21" y2="12"></line>
+                  <line x1="3" y1="6" x2="21" y2="6"></line>
+                  <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+                <span>{sidebarOpen ? 'Hide Menu' : 'Open Menu'}</span>
+              </button>
+              <div>
+                <h1 style={s.pageTitle}>
+                  {activeTab === 'shopify' ? 'Shopify Integration' : activeTab === 'orders' ? 'Store Orders' : activeTab === 'account' ? 'My Account' : 'Tenant Dashboard'}
+                </h1>
+                <p style={s.pageSubtitle}>
+                  {activeTab === 'account'
+                    ? 'View your store account profile, tenant identifier, Shopify connection, and credentials.'
+                    : <>Welcome back, <strong>{userName}</strong>. Manage your store tenant settings and API configurations.</>}
+                </p>
+              </div>
             </div>
             <div style={s.headerBadge}>
               <span style={s.statusDot} />
@@ -628,6 +979,13 @@ export default function TenantDashboard() {
               <TenantOrders tenantId={user?.uid} isAdmin={false} />
             </div>
           )}
+
+          {/* ACCOUNT TAB VIEW */}
+          {activeTab === 'account' && (
+            <div style={{ padding: '4px 0' }}>
+              {renderAccountView()}
+            </div>
+          )}
         </div>
       </main>
 
@@ -764,13 +1122,21 @@ const s = {
   },
   appLayout: {
     display: 'flex',
+    height: '100vh',
+    maxHeight: '100vh',
     minHeight: '100vh',
+    overflow: 'hidden',
     backgroundColor: '#f8fafc',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
     color: '#0f172a',
   },
   sidebar: {
     width: '260px',
+    height: '100vh',
+    maxHeight: '100vh',
+    position: 'sticky',
+    top: 0,
+    left: 0,
     backgroundColor: '#ffffff',
     borderRight: '1px solid #e2e8f0',
     display: 'flex',
@@ -778,14 +1144,65 @@ const s = {
     padding: '24px 16px',
     boxSizing: 'border-box',
     flexShrink: 0,
+    overflowY: 'auto',
   },
   sidebarBrand: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: '12px',
-    paddingBottom: '24px',
+    paddingBottom: '20px',
     borderBottom: '1px solid #f1f5f9',
     marginBottom: '20px',
+  },
+  sidebarCloseBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    backgroundColor: '#f8fafc',
+    color: '#64748b',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  tabToOpenBtn: {
+    position: 'fixed',
+    top: '24px',
+    left: '0px',
+    zIndex: 9999,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 16px 10px 12px',
+    backgroundColor: '#0f172a',
+    color: '#f8fafc',
+    border: '1px solid #334155',
+    borderLeft: 'none',
+    borderRadius: '0 10px 10px 0',
+    boxShadow: '0 4px 16px rgba(15, 23, 42, 0.25)',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: '700',
+    letterSpacing: '0.04em',
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  headerMenuToggleBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 14px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+    color: '#334155',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+    transition: 'all 0.15s ease',
   },
   logoBadge: {
     width: '42px',
@@ -915,12 +1332,17 @@ const s = {
   },
   mainContent: {
     flex: 1,
+    height: '100vh',
+    maxHeight: '100vh',
     overflowY: 'auto',
-    padding: '36px',
+    padding: '24px 28px',
     boxSizing: 'border-box',
+    minWidth: 0,
+    width: '100%',
   },
   container: {
-    maxWidth: '1000px',
+    maxWidth: '100%',
+    width: '100%',
     margin: '0 auto',
   },
   header: {

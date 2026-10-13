@@ -78,7 +78,14 @@ public class ShopifyOrderWebhookService {
                 if ((customerPhone == null || customerPhone.isEmpty()) && shippingAddress.get("phone") != null) {
                     customerPhone = String.valueOf(shippingAddress.get("phone"));
                 }
+                if (customerName.trim().isEmpty() || "Unknown".equals(customerName)) {
+                    if (shippingAddress.get("name") != null) {
+                        customerName = String.valueOf(shippingAddress.get("name"));
+                    }
+                }
                 List<String> addrParts = new ArrayList<>();
+                if (shippingAddress.get("name") != null) addrParts.add(String.valueOf(shippingAddress.get("name")));
+                if (shippingAddress.get("company") != null) addrParts.add(String.valueOf(shippingAddress.get("company")));
                 if (shippingAddress.get("address1") != null) addrParts.add(String.valueOf(shippingAddress.get("address1")));
                 if (shippingAddress.get("address2") != null) addrParts.add(String.valueOf(shippingAddress.get("address2")));
                 if (shippingAddress.get("city") != null) addrParts.add(String.valueOf(shippingAddress.get("city")));
@@ -86,6 +93,29 @@ public class ShopifyOrderWebhookService {
                 if (shippingAddress.get("zip") != null) addrParts.add(String.valueOf(shippingAddress.get("zip")));
                 if (shippingAddress.get("country") != null) addrParts.add(String.valueOf(shippingAddress.get("country")));
                 shippingAddressStr = String.join(", ", addrParts);
+            }
+
+            String billingAddressStr = "";
+            Map<String, Object> billingAddress = (Map<String, Object>) payload.get("billing_address");
+            if (billingAddress != null) {
+                List<String> bParts = new ArrayList<>();
+                if (billingAddress.get("name") != null) bParts.add(String.valueOf(billingAddress.get("name")));
+                if (billingAddress.get("company") != null) bParts.add(String.valueOf(billingAddress.get("company")));
+                if (billingAddress.get("address1") != null) bParts.add(String.valueOf(billingAddress.get("address1")));
+                if (billingAddress.get("address2") != null) bParts.add(String.valueOf(billingAddress.get("address2")));
+                if (billingAddress.get("city") != null) bParts.add(String.valueOf(billingAddress.get("city")));
+                if (billingAddress.get("province") != null) bParts.add(String.valueOf(billingAddress.get("province")));
+                if (billingAddress.get("zip") != null) bParts.add(String.valueOf(billingAddress.get("zip")));
+                if (billingAddress.get("country") != null) bParts.add(String.valueOf(billingAddress.get("country")));
+                billingAddressStr = String.join(", ", bParts);
+            }
+
+            String customerNoteStr = payload.get("note") != null ? String.valueOf(payload.get("note")) : "";
+            String paymentMethodStr = payload.get("gateway") != null ? String.valueOf(payload.get("gateway")) : "";
+            String shippingMethodStr = "";
+            List<Map<String, Object>> shippingLines = (List<Map<String, Object>>) payload.get("shipping_lines");
+            if (shippingLines != null && !shippingLines.isEmpty()) {
+                shippingMethodStr = String.valueOf(shippingLines.get(0).get("title"));
             }
 
             List<Map<String, Object>> lineItems = (List<Map<String, Object>>) payload.get("line_items");
@@ -278,6 +308,10 @@ public class ShopifyOrderWebhookService {
             order.setItems(kiyuziyuItems);
             order.setCustomerPhone(customerPhone);
             order.setShippingAddress(shippingAddressStr);
+            order.setBillingAddress(billingAddressStr);
+            order.setCustomerNote(customerNoteStr);
+            order.setPaymentMethod(paymentMethodStr);
+            order.setShippingMethod(shippingMethodStr);
 
             String financialStatus = payload.get("financial_status") != null ? String.valueOf(payload.get("financial_status")) : "";
             String initialStatus = "paid".equalsIgnoreCase(financialStatus) ? "Payment Done" : "Pending Payment";

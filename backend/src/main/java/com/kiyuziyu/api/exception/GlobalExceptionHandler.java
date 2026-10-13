@@ -70,6 +70,17 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_GATEWAY);
     }
 
+    @ExceptionHandler(java.util.concurrent.ExecutionException.class)
+    public ResponseEntity<Map<String, Object>> handleExecutionException(java.util.concurrent.ExecutionException ex) {
+        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+        org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class)
+                .error("[GlobalExceptionHandler] ExecutionException cause: {}", cause.getMessage(), cause);
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", cause.getMessage() != null ? cause.getMessage() : "Database operation failed");
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneralException(Exception ex) {
         // Log full detail internally — NEVER expose stack trace or internal message to clients
@@ -77,7 +88,7 @@ public class GlobalExceptionHandler {
                 .error("[GlobalExceptionHandler] Unhandled exception: {}", ex.getMessage(), ex);
         Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("success", false);
-        errorResponse.put("message", "An internal error occurred. Please try again.");
+        errorResponse.put("message", ex.getMessage() != null ? ex.getMessage() : "An internal error occurred. Please try again.");
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }

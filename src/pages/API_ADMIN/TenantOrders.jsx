@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, doc, updateDoc, onSnapshot } from 'firebase/firestore';
 
@@ -92,16 +92,89 @@ export const normalizeStatus = (rawStatus) => {
     return 'Pending Payment';
 };
 
-export default function TenantOrders({ tenantId, isAdmin = false }) {
+export default function TenantOrders({ tenantId, isAdmin = false, tenants = [] }) {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
+    const [selectedTenantFilter, setSelectedTenantFilter] = useState('ALL');
+    const [selectedDateFilter, setSelectedDateFilter] = useState('');
     const [statusUpdatingId, setStatusUpdatingId] = useState(null);
     const [statusToast, setStatusToast] = useState({ show: false, text: '', isError: false });
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [copiedField, setCopiedField] = useState(null);
+
+    // Map tenant information for lookup by tenantId or code
+    const tenantInfoMap = useMemo(() => {
+        const map = {
+            'g0usC1NMyehaoSKJRhOqUUhZAO62': {
+                name: 'Kiyuziyu Store',
+                code: 'KIYU-STORE',
+                email: 'store@kiyuziyu.com'
+            }
+        };
+        (tenants || []).forEach((t) => {
+            if (!t) return;
+            const info = {
+                name: t.name || t.fullName || t.tenantName || 'Tenant',
+                code: t.code || t.tenantCode || '',
+                email: t.ownerEmail || t.email || ''
+            };
+            if (t.id) map[t.id] = info;
+            if (t.tenantId) map[t.tenantId] = info;
+            if (t.ownerUserId) map[t.ownerUserId] = info;
+            if (t.code) map[t.code] = info;
+        });
+        return map;
+    }, [tenants]);
+
+    const getTenantDisplay = useCallback((order) => {
+        if (!order) return { name: 'Unknown', code: '', id: '' };
+        const tId = order.tenantId || '';
+        const mapped = tId ? tenantInfoMap[tId] : null;
+        const name = order.tenantName || mapped?.name || order.storeName || (tId ? (mapped?.name || `${tId.substring(0, 8)}...`) : 'Tenant');
+        const code = order.tenantCode || mapped?.code || '';
+        return { name, code, id: tId };
+    }, [tenantInfoMap]);
+
+    // Available tenants for filter dropdown
+    const availableTenants = useMemo(() => {
+        const map = new Map();
+        (tenants || []).forEach((t) => {
+            if (t && (t.id || t.tenantId)) {
+                const id = t.id || t.tenantId;
+                map.set(id, {
+                    id,
+                    name: t.name || t.fullName || 'Tenant',
+                    code: t.code || ''
+                });
+            }
+        });
+        orders.forEach((o) => {
+            if (o.tenantId && !map.has(o.tenantId)) {
+                const info = tenantInfoMap[o.tenantId];
+                map.set(o.tenantId, {
+                    id: o.tenantId,
+                    name: info?.name || o.tenantName || o.storeName || `Tenant (${o.tenantId.substring(0, 6)}...)`,
+                    code: info?.code || o.tenantCode || ''
+                });
+            }
+        });
+        return Array.from(map.values());
+    }, [tenants, orders, tenantInfoMap]);
+
+    const handleCopyText = (text, fieldName) => {
+        if (!text) return;
+        try {
+            navigator.clipboard.writeText(text);
+            setCopiedField(fieldName);
+            setTimeout(() => setCopiedField(null), 2000);
+        } catch (e) {
+            console.error('Copy failed:', e);
+        }
+    };
 
     // =========================================================================
     // REAL-TIME DATA FETCHING ("PROPER DATA FETCH")
@@ -285,6 +358,27 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
         }
     };
 
+    const formatOrderDate = (val) => {
+        if (!val) return { date: 'N/A', time: '' };
+        try {
+            const d = val.toDate ? val.toDate() : (val.toMillis ? new Date(val.toMillis()) : new Date(val));
+            if (isNaN(d.getTime())) return { date: String(val), time: '' };
+            const date = d.toLocaleDateString('en-IN', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            });
+            const time = d.toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+            return { date, time };
+        } catch {
+            return { date: String(val), time: '' };
+        }
+    };
+
     const renderStatusBadge = (rawStatus, size = 'normal') => {
         const norm = normalizeStatus(rawStatus);
         const cfg = STATUS_CONFIG[norm] || STATUS_CONFIG['Pending Payment'];
@@ -332,7 +426,7 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
         return counts;
     }, [orders]);
 
-    // Filter orders by search & status tab
+    // Filter orders by search, status tab, tenant, and date
     const filteredOrders = useMemo(() => {
         return orders.filter((o) => {
             const normStatus = normalizeStatus(o.status);
@@ -340,18 +434,71 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                 return false;
             }
 
+            // Tenant filter (for Admin)
+            if (isAdmin && selectedTenantFilter !== 'ALL') {
+                if (o.tenantId !== selectedTenantFilter) return false;
+            }
+
+            // Date filter (picker: 'YYYY-MM-DD')
+            if (selectedDateFilter) {
+                let orderDateStr = '';
+                if (o.createdAt) {
+                    try {
+                        const d = o.createdAt.toDate ? o.createdAt.toDate() : (o.createdAt.toMillis ? new Date(o.createdAt.toMillis()) : new Date(o.createdAt));
+                        if (!isNaN(d.getTime())) {
+                            orderDateStr = d.toISOString().split('T')[0];
+                        }
+                    } catch (e) {}
+                }
+                if (orderDateStr !== selectedDateFilter) return false;
+            }
+
             if (!searchQuery.trim()) return true;
+
             const q = searchQuery.toLowerCase().trim();
             const num = String(o.orderNumber || '').toLowerCase();
             const shopifyId = String(o.shopifyOrderId || '').toLowerCase();
             const cust = String(o.customerName || '').toLowerCase();
             const email = String(o.customerEmail || '').toLowerCase();
-            const tenant = String(o.tenantId || '').toLowerCase();
-            const code = o.items?.some((i) => (i.productCode || '').toLowerCase().includes(q));
+            const phone = String(o.customerPhone || o.phone || '').toLowerCase();
+            const tDisplay = getTenantDisplay(o);
+            const tName = String(tDisplay.name || '').toLowerCase();
+            const tCode = String(tDisplay.code || '').toLowerCase();
+            const tId = String(o.tenantId || '').toLowerCase();
 
-            return num.includes(q) || shopifyId.includes(q) || cust.includes(q) || email.includes(q) || tenant.includes(q) || code;
+            // Product code & variant match
+            const prodMatch = o.items?.some((i) =>
+                (i.productCode || '').toLowerCase().includes(q) ||
+                (i.sku || '').toLowerCase().includes(q) ||
+                (i.productName || '').toLowerCase().includes(q) ||
+                (i.variantName || '').toLowerCase().includes(q)
+            );
+
+            // Date text match (e.g. '8 oct', '2026', 'october')
+            let dateMatch = false;
+            if (o.createdAt) {
+                try {
+                    const d = o.createdAt.toDate ? o.createdAt.toDate() : (o.createdAt.toMillis ? new Date(o.createdAt.toMillis()) : new Date(o.createdAt));
+                    if (!isNaN(d.getTime())) {
+                        const dStr = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }).toLowerCase();
+                        const fullDStr = d.toISOString().split('T')[0].toLowerCase();
+                        if (dStr.includes(q) || fullDStr.includes(q)) dateMatch = true;
+                    }
+                } catch (e) {}
+            }
+
+            return num.includes(q) ||
+                shopifyId.includes(q) ||
+                cust.includes(q) ||
+                email.includes(q) ||
+                phone.includes(q) ||
+                tName.includes(q) ||
+                tCode.includes(q) ||
+                tId.includes(q) ||
+                prodMatch ||
+                dateMatch;
         });
-    }, [orders, selectedStatusFilter, searchQuery]);
+    }, [orders, selectedStatusFilter, selectedTenantFilter, selectedDateFilter, searchQuery, isAdmin, tenantInfoMap, getTenantDisplay]);
 
     // =========================================================================
     // LOADING & ERROR STATES
@@ -413,6 +560,90 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
             'Delivered'
         ];
         const currentStepIndex = pipelineSteps.indexOf(currentNormStatus);
+
+        // Extract all comprehensive customer details from Shopify order
+        let custName = selectedOrder.customerName || '';
+        if (!custName && selectedOrder.customer) {
+            custName = [selectedOrder.customer.first_name, selectedOrder.customer.last_name].filter(Boolean).join(' ') || selectedOrder.customer.name || '';
+        }
+        if (!custName && selectedOrder.shipping_address) {
+            custName = selectedOrder.shipping_address.name || [selectedOrder.shipping_address.first_name, selectedOrder.shipping_address.last_name].filter(Boolean).join(' ') || '';
+        }
+        if (!custName && selectedOrder.shippingAddress && typeof selectedOrder.shippingAddress === 'object') {
+            custName = selectedOrder.shippingAddress.name || [selectedOrder.shippingAddress.first_name, selectedOrder.shippingAddress.last_name].filter(Boolean).join(' ') || '';
+        }
+        custName = custName.trim() || 'N/A';
+
+        const custEmail = (selectedOrder.customerEmail || selectedOrder.email || selectedOrder.customer?.email || selectedOrder.contact_email || '').trim();
+
+        let custPhone = selectedOrder.customerPhone || 
+                        selectedOrder.phone || 
+                        selectedOrder.customer?.phone || 
+                        selectedOrder.shipping_address?.phone || 
+                        (typeof selectedOrder.shippingAddress === 'object' ? selectedOrder.shippingAddress?.phone : null) ||
+                        selectedOrder.billing_address?.phone ||
+                        (typeof selectedOrder.billingAddress === 'object' ? selectedOrder.billingAddress?.phone : null) ||
+                        selectedOrder.customer?.default_address?.phone || 
+                        '';
+        custPhone = custPhone ? String(custPhone).trim() : '';
+
+        // Shipping Address extraction
+        let shippingInfo = null;
+        if (selectedOrder.shipping_address && typeof selectedOrder.shipping_address === 'object') {
+            shippingInfo = selectedOrder.shipping_address;
+        } else if (selectedOrder.shippingAddress && typeof selectedOrder.shippingAddress === 'object') {
+            shippingInfo = selectedOrder.shippingAddress;
+        } else if (typeof selectedOrder.shippingAddress === 'string' && selectedOrder.shippingAddress.trim()) {
+            shippingInfo = { fullString: selectedOrder.shippingAddress.trim() };
+        } else if (typeof selectedOrder.shipping_address === 'string' && selectedOrder.shipping_address.trim()) {
+            shippingInfo = { fullString: selectedOrder.shipping_address.trim() };
+        } else if (selectedOrder.address && typeof selectedOrder.address === 'object') {
+            shippingInfo = selectedOrder.address;
+        } else if (typeof selectedOrder.address === 'string' && selectedOrder.address.trim()) {
+            shippingInfo = { fullString: selectedOrder.address.trim() };
+        }
+
+        // Billing Address extraction
+        let billingInfo = null;
+        if (selectedOrder.billing_address && typeof selectedOrder.billing_address === 'object') {
+            billingInfo = selectedOrder.billing_address;
+        } else if (selectedOrder.billingAddress && typeof selectedOrder.billingAddress === 'object') {
+            billingInfo = selectedOrder.billingAddress;
+        } else if (typeof selectedOrder.billingAddress === 'string' && selectedOrder.billingAddress.trim()) {
+            billingInfo = { fullString: selectedOrder.billingAddress.trim() };
+        } else if (typeof selectedOrder.billing_address === 'string' && selectedOrder.billing_address.trim()) {
+            billingInfo = { fullString: selectedOrder.billing_address.trim() };
+        }
+
+        // Customer notes & special instructions
+        const custNote = (selectedOrder.note || selectedOrder.customerNote || selectedOrder.notes || selectedOrder.customer?.note || '').trim();
+
+        // Shopify note attributes (e.g. gift message, GST, delivery date)
+        const custNoteAttributes = Array.isArray(selectedOrder.note_attributes) ? selectedOrder.note_attributes : [];
+
+        // Customer & order tags
+        let custTags = [];
+        if (Array.isArray(selectedOrder.tags)) {
+            custTags = selectedOrder.tags;
+        } else if (typeof selectedOrder.tags === 'string' && selectedOrder.tags.trim()) {
+            custTags = selectedOrder.tags.split(',').map((t) => t.trim()).filter(Boolean);
+        } else if (typeof selectedOrder.customer?.tags === 'string' && selectedOrder.customer.tags.trim()) {
+            custTags = selectedOrder.customer.tags.split(',').map((t) => t.trim()).filter(Boolean);
+        }
+
+        // Payment Gateway / Method
+        const paymentGateway = selectedOrder.gateway || 
+                               (Array.isArray(selectedOrder.payment_gateway_names) ? selectedOrder.payment_gateway_names.join(', ') : selectedOrder.payment_gateway_names) || 
+                               selectedOrder.paymentMethod || 
+                               '';
+
+        // Delivery Method
+        let shippingMethod = '';
+        if (Array.isArray(selectedOrder.shipping_lines) && selectedOrder.shipping_lines.length > 0) {
+            shippingMethod = selectedOrder.shipping_lines.map((s) => s.title || s.code).filter(Boolean).join(', ');
+        } else if (selectedOrder.shippingMethod) {
+            shippingMethod = selectedOrder.shippingMethod;
+        }
 
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -674,9 +905,9 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                     )}
                 </div>
 
-                {/* 3 Detail Cards (Customer, References, Financial) */}
+                {/* 4 Detail Cards (Customer, Delivery Address, References, Financial) */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-                    {/* Customer Info Card */}
+                    {/* Customer Profile & Contact Card */}
                     <div style={detailCardStyle}>
                         <div style={cardHeaderStyle}>
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
@@ -684,31 +915,202 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                                 <circle cx="12" cy="7" r="4"></circle>
                             </svg>
                             <h3 style={cardTitleStyle}>Customer Details</h3>
+                            <span style={{ marginLeft: 'auto', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', backgroundColor: '#eff6ff', color: '#2563eb' }}>
+                                Shopify Buyer
+                            </span>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                             <div>
-                                <span style={labelStyle}>Customer Name:</span>
-                                <div style={{ fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>
-                                    {selectedOrder.customerName || 'N/A'}
+                                <span style={labelStyle}>Customer Name</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#dbeafe', color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '12px', flexShrink: 0 }}>
+                                        {(custName.charAt(0) || 'C').toUpperCase()}
+                                    </div>
+                                    <div style={{ fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>
+                                        {custName}
+                                    </div>
                                 </div>
                             </div>
+
                             <div>
-                                <span style={labelStyle}>Email Address:</span>
-                                <div style={{ fontSize: '14px', color: '#334155', wordBreak: 'break-all' }}>
-                                    {selectedOrder.customerEmail || 'No email provided'}
-                                </div>
+                                <span style={labelStyle}>Email Address</span>
+                                {custEmail ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
+                                        <a
+                                            href={`mailto:${custEmail}`}
+                                            title="Send Email"
+                                            style={{ fontSize: '13px', color: '#2563eb', textDecoration: 'none', wordBreak: 'break-all', fontWeight: '500' }}
+                                        >
+                                            {custEmail}
+                                        </a>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopyText(custEmail, 'email')}
+                                            style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#475569', cursor: 'pointer', flexShrink: 0 }}
+                                        >
+                                            {copiedField === 'email' ? '✓ Copied' : 'Copy'}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <span style={{ fontSize: '13px', color: '#94a3b8', fontStyle: 'italic' }}>
+                                        No email provided
+                                    </span>
+                                )}
                             </div>
+
                             <div>
-                                <span style={labelStyle}>Phone Number:</span>
-                                <div style={{ fontSize: '14px', color: '#334155' }}>
-                                    {selectedOrder.customerPhone || selectedOrder.phone || 'N/A'}
-                                </div>
+                                <span style={labelStyle}>Phone Number</span>
+                                {custPhone ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
+                                        <a
+                                            href={`tel:${custPhone}`}
+                                            title="Call Customer"
+                                            style={{ fontSize: '13.5px', color: '#059669', fontWeight: '600', textDecoration: 'none' }}
+                                        >
+                                            📞 {custPhone}
+                                        </a>
+                                        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                                            <a
+                                                href={`https://wa.me/${custPhone.replace(/[^0-9]/g, '')}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                title="Open in WhatsApp"
+                                                style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #bbf7d0', backgroundColor: '#f0fdf4', color: '#16a34a', textDecoration: 'none', fontWeight: '600' }}
+                                            >
+                                                WhatsApp
+                                            </a>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCopyText(custPhone, 'phone')}
+                                                style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#475569', cursor: 'pointer' }}
+                                            >
+                                                {copiedField === 'phone' ? '✓' : 'Copy'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>
+                                        Not provided in Shopify checkout
+                                    </span>
+                                )}
                             </div>
-                            {selectedOrder.shippingAddress && (
+
+                            {custTags.length > 0 && (
                                 <div>
-                                    <span style={labelStyle}>Shipping Address:</span>
-                                    <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.4 }}>
-                                        {selectedOrder.shippingAddress}
+                                    <span style={labelStyle}>Customer Tags</span>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                        {custTags.map((t, idx) => (
+                                            <span key={idx} style={{ fontSize: '11px', fontWeight: '600', padding: '2px 8px', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                                                #{t}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Delivery & Shipping Address Card */}
+                    <div style={detailCardStyle}>
+                        <div style={cardHeaderStyle}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                            <h3 style={cardTitleStyle}>Delivery & Shipping Address</h3>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {shippingInfo ? (
+                                <>
+                                    {shippingInfo.fullString ? (
+                                        <div>
+                                            <span style={labelStyle}>Shipping Address</span>
+                                            <div style={{ fontSize: '13px', color: '#1e293b', lineHeight: 1.5, backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                                {shippingInfo.fullString}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {(shippingInfo.name || shippingInfo.first_name) && (
+                                                <div>
+                                                    <span style={labelStyle}>Recipient Name</span>
+                                                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>
+                                                        {shippingInfo.name || [shippingInfo.first_name, shippingInfo.last_name].filter(Boolean).join(' ')}
+                                                        {shippingInfo.company ? ` (${shippingInfo.company})` : ''}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {(shippingInfo.address1 || shippingInfo.address2) && (
+                                                <div>
+                                                    <span style={labelStyle}>Street Address</span>
+                                                    <div style={{ fontSize: '13px', color: '#334155' }}>
+                                                        {[shippingInfo.address1, shippingInfo.address2].filter(Boolean).join(', ')}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <span style={labelStyle}>City, State & Postal Code</span>
+                                                <div style={{ fontSize: '13px', color: '#334155' }}>
+                                                    {[
+                                                        shippingInfo.city,
+                                                        shippingInfo.province || shippingInfo.state,
+                                                        shippingInfo.zip || shippingInfo.postalCode
+                                                    ].filter(Boolean).join(', ') || 'N/A'}
+                                                </div>
+                                            </div>
+
+                                            {shippingInfo.country && (
+                                                <div>
+                                                    <span style={labelStyle}>Country</span>
+                                                    <div style={{ fontSize: '13px', color: '#334155' }}>
+                                                        {shippingInfo.country}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {shippingInfo.phone && (
+                                                <div>
+                                                    <span style={labelStyle}>Delivery Phone</span>
+                                                    <div style={{ fontSize: '13px', color: '#059669', fontWeight: '600' }}>
+                                                        📞 {shippingInfo.phone}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+
+                                    {shippingMethod && (
+                                        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                                            <span style={labelStyle}>Shipping Method</span>
+                                            <div style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>
+                                                🚚 {shippingMethod}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div style={{ padding: '14px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', textAlign: 'center', color: '#64748b' }}>
+                                    <div style={{ fontSize: '20px', marginBottom: '4px' }}>📦</div>
+                                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>No Physical Shipping Address</div>
+                                    <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Customer may have used digital delivery or store pickup.</div>
+                                </div>
+                            )}
+
+                            {/* Billing Address snippet if present & different */}
+                            {billingInfo && (
+                                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                                    <span style={labelStyle}>Billing Address</span>
+                                    <div style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.4 }}>
+                                        {billingInfo.fullString || [
+                                            billingInfo.address1,
+                                            billingInfo.city,
+                                            billingInfo.province || billingInfo.state,
+                                            billingInfo.zip,
+                                            billingInfo.country
+                                        ].filter(Boolean).join(', ')}
                                     </div>
                                 </div>
                             )}
@@ -737,20 +1139,45 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                                     {selectedOrder.orderId || selectedOrder.id}
                                 </div>
                             </div>
-                            {isAdmin && (
-                                <div>
-                                    <span style={labelStyle}>Tenant ID:</span>
-                                    <div style={{ fontSize: '13px', color: '#0f172a', fontWeight: '600', fontFamily: 'monospace' }}>
-                                        {selectedOrder.tenantId || 'N/A'}
-                                    </div>
-                                </div>
-                            )}
+                            {isAdmin && (() => {
+                                const tDisplay = getTenantDisplay(selectedOrder);
+                                return (
+                                    <>
+                                        <div>
+                                            <span style={labelStyle}>Tenant Name:</span>
+                                            <div style={{ fontSize: '13.5px', color: '#0f172a', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span>🏢</span>
+                                                <span>{tDisplay.name}</span>
+                                                {tDisplay.code && (
+                                                    <span style={{ fontSize: '10.5px', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#b89620', fontWeight: '700', border: '1px solid #fde68a' }}>
+                                                        {tDisplay.code}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span style={labelStyle}>Tenant ID:</span>
+                                            <div style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace' }}>
+                                                {selectedOrder.tenantId || 'N/A'}
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
                             <div>
                                 <span style={labelStyle}>Store Domain / ID:</span>
                                 <div style={{ fontSize: '13px', color: '#475569' }}>
                                     {selectedOrder.storeId || 'Shopify Store'}
                                 </div>
                             </div>
+                            {paymentGateway && (
+                                <div>
+                                    <span style={labelStyle}>Payment Method:</span>
+                                    <div style={{ fontSize: '13px', color: '#0f172a', fontWeight: '600' }}>
+                                        💳 {paymentGateway}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -806,6 +1233,42 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                         </div>
                     </div>
                 </div>
+
+                {/* Customer Notes / Special Instructions Banner (If provided in Shopify) */}
+                {(custNote || custNoteAttributes.length > 0) && (
+                    <div
+                        style={{
+                            backgroundColor: '#fffbeb',
+                            borderRadius: '12px',
+                            border: '1px solid #fde68a',
+                            padding: '16px 20px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px'
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '18px' }}>📝</span>
+                            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#92400e' }}>
+                                Customer Order Notes & Special Instructions (From Shopify)
+                            </h4>
+                        </div>
+                        {custNote && (
+                            <p style={{ margin: 0, fontSize: '13px', color: '#78350f', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                                {custNote}
+                            </p>
+                        )}
+                        {custNoteAttributes.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                                {custNoteAttributes.map((attr, idx) => (
+                                    <div key={idx} style={{ padding: '5px 10px', backgroundColor: '#fef3c7', borderRadius: '6px', border: '1px solid #fcd34d', fontSize: '12px', color: '#78350f' }}>
+                                        <strong>{attr.name || attr.key}:</strong> {attr.value}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Ordered Items Table */}
                 <div style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
@@ -970,7 +1433,7 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                 </div>
             )}
 
-            {/* Header + Search bar + Refresh */}
+            {/* Header + Search bar + Tenant & Date Filters + Refresh */}
             <div
                 style={{
                     padding: '20px 24px',
@@ -993,20 +1456,138 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <input
-                        type="text"
-                        placeholder="Search order #, customer, product..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        style={{
-                            padding: '8px 14px',
-                            fontSize: '13px',
-                            borderRadius: '8px',
-                            border: '1px solid #cbd5e1',
-                            outline: 'none',
-                            minWidth: '230px'
-                        }}
-                    />
+                    {/* Search Input */}
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            type="text"
+                            placeholder="Search by order #, cust, product code, tenant..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{
+                                padding: '8px 28px 8px 12px',
+                                fontSize: '13px',
+                                borderRadius: '8px',
+                                border: '1px solid #cbd5e1',
+                                outline: 'none',
+                                minWidth: '260px'
+                            }}
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                style={{
+                                    position: 'absolute',
+                                    right: '8px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#94a3b8',
+                                    cursor: 'pointer',
+                                    fontSize: '13px',
+                                    padding: '2px'
+                                }}
+                                title="Clear search"
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Tenant Dropdown Filter (Admin only) */}
+                    {isAdmin && (
+                        <select
+                            value={selectedTenantFilter}
+                            onChange={(e) => setSelectedTenantFilter(e.target.value)}
+                            style={{
+                                padding: '8px 12px',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                borderRadius: '8px',
+                                border: selectedTenantFilter !== 'ALL' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                backgroundColor: selectedTenantFilter !== 'ALL' ? '#eff6ff' : '#fff',
+                                color: selectedTenantFilter !== 'ALL' ? '#1d4ed8' : '#334155',
+                                outline: 'none',
+                                cursor: 'pointer',
+                                maxWidth: '190px'
+                            }}
+                            title="Filter by Tenant"
+                        >
+                            <option value="ALL">🏢 All Tenants ({availableTenants.length})</option>
+                            {availableTenants.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                    {t.name} {t.code ? `(${t.code})` : ''}
+                                </option>
+                            ))}
+                        </select>
+                    )}
+
+                    {/* Date Picker Filter */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <input
+                            type="date"
+                            value={selectedDateFilter}
+                            onChange={(e) => setSelectedDateFilter(e.target.value)}
+                            style={{
+                                padding: '7px 10px',
+                                fontSize: '12.5px',
+                                borderRadius: '8px',
+                                border: selectedDateFilter ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                backgroundColor: selectedDateFilter ? '#eff6ff' : '#fff',
+                                color: selectedDateFilter ? '#1d4ed8' : '#334155',
+                                fontWeight: '500',
+                                outline: 'none',
+                                cursor: 'pointer'
+                            }}
+                            title="Filter by Order Date"
+                        />
+                        {selectedDateFilter && (
+                            <button
+                                onClick={() => setSelectedDateFilter('')}
+                                title="Clear date filter"
+                                style={{
+                                    padding: '5px 8px',
+                                    fontSize: '11px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #cbd5e1',
+                                    backgroundColor: '#f1f5f9',
+                                    color: '#64748b',
+                                    cursor: 'pointer',
+                                    fontWeight: '700'
+                                }}
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Reset All Filters Button */}
+                    {(searchQuery || selectedStatusFilter !== 'ALL' || selectedTenantFilter !== 'ALL' || selectedDateFilter) && (
+                        <button
+                            onClick={() => {
+                                setSearchQuery('');
+                                setSelectedStatusFilter('ALL');
+                                setSelectedTenantFilter('ALL');
+                                setSelectedDateFilter('');
+                            }}
+                            style={{
+                                padding: '7px 12px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                borderRadius: '8px',
+                                border: '1px solid #fecaca',
+                                backgroundColor: '#fef2f2',
+                                color: '#dc2626',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                            }}
+                            title="Reset all search and filter criteria"
+                        >
+                            ✕ Reset
+                        </button>
+                    )}
 
                     <button
                         onClick={() => setRefreshTrigger((p) => p + 1)}
@@ -1037,14 +1618,13 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
             {/* STATUS FILTER PILLS BAR */}
             <div
                 style={{
-                    padding: '12px 24px',
+                    padding: '12px 20px',
                     borderBottom: '1px solid #e2e8f0',
                     backgroundColor: '#fff',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    overflowX: 'auto',
-                    whiteSpace: 'nowrap'
+                    flexWrap: 'wrap'
                 }}
             >
                 {/* ALL TAB */}
@@ -1111,31 +1691,31 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
             </div>
 
             {/* Orders Table */}
-            <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <div style={{ width: '100%', overflowX: 'auto', boxSizing: 'border-box' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'auto' }}>
                     <thead style={{ backgroundColor: '#f1f5f9' }}>
                         <tr>
-                            <th style={thStyle}>Order ID</th>
-                            <th style={thStyle}>Date</th>
-                            {isAdmin && <th style={thStyle}>Tenant</th>}
-                            <th style={thStyle}>Customer</th>
-                            <th style={thStyle}>Products</th>
-                            <th style={{ ...thStyle, textAlign: 'center' }}>Qty</th>
+                            <th style={{ ...thStyle, width: '7%' }}>Order ID</th>
+                            <th style={{ ...thStyle, width: '9%' }}>Date</th>
+                            {isAdmin && <th style={{ ...thStyle, width: '11%' }}>Tenant Name</th>}
+                            <th style={{ ...thStyle, width: isAdmin ? '13%' : '15%' }}>Customer</th>
+                            <th style={{ ...thStyle, width: isAdmin ? '20%' : '24%' }}>Products</th>
+                            <th style={{ ...thStyle, width: '4%', textAlign: 'center' }}>Qty</th>
                             {isAdmin ? (
                                 <>
-                                    <th style={thStyle}>Purchase Price</th>
-                                    <th style={thStyle}>Selling Price</th>
-                                    <th style={{ ...thStyle, color: '#16a34a' }}>Profit</th>
+                                    <th style={{ ...thStyle, width: '8%' }}>Purchase</th>
+                                    <th style={{ ...thStyle, width: '9%' }}>Selling</th>
+                                    <th style={{ ...thStyle, width: '8%', color: '#16a34a' }}>Profit</th>
                                 </>
                             ) : (
                                 <>
-                                    <th style={thStyle}>Base Price</th>
-                                    <th style={thStyle}>Selling Price</th>
-                                    <th style={{ ...thStyle, color: '#16a34a' }}>Profit</th>
+                                    <th style={{ ...thStyle, width: '8%' }}>Base Price</th>
+                                    <th style={{ ...thStyle, width: '9%' }}>Selling Price</th>
+                                    <th style={{ ...thStyle, width: '8%', color: '#16a34a' }}>Profit</th>
                                 </>
                             )}
-                            <th style={thStyle}>Status</th>
-                            <th style={{ ...thStyle, textAlign: 'center' }}>Action</th>
+                            <th style={{ ...thStyle, width: '11%' }}>Status</th>
+                            <th style={{ ...thStyle, width: '7%', textAlign: 'center' }}>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1144,15 +1724,17 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                                 <td colSpan={isAdmin ? 11 : 10} style={{ padding: '48px', textAlign: 'center', color: '#64748b' }}>
                                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>📦</div>
                                     <div style={{ fontSize: '15px', fontWeight: '600', color: '#1e293b' }}>
-                                        {searchQuery || selectedStatusFilter !== 'ALL'
+                                        {searchQuery || selectedStatusFilter !== 'ALL' || selectedTenantFilter !== 'ALL' || selectedDateFilter
                                             ? 'No orders match your filter criteria.'
                                             : 'No orders recorded yet.'}
                                     </div>
-                                    {(searchQuery || selectedStatusFilter !== 'ALL') && (
+                                    {(searchQuery || selectedStatusFilter !== 'ALL' || selectedTenantFilter !== 'ALL' || selectedDateFilter) && (
                                         <button
                                             onClick={() => {
                                                 setSearchQuery('');
                                                 setSelectedStatusFilter('ALL');
+                                                setSelectedTenantFilter('ALL');
+                                                setSelectedDateFilter('');
                                             }}
                                             style={{
                                                 marginTop: '12px',
@@ -1190,78 +1772,108 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                                         onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
                                         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = i % 2 === 0 ? '#fff' : '#f8fafc'; }}
                                     >
-                                        <td style={{ ...tdStyle, fontWeight: '700', color: '#2563eb' }}>
+                                        <td style={{ ...tdStyle, fontWeight: '700', color: '#2563eb', whiteSpace: 'nowrap' }}>
                                             #{order.orderNumber || 'N/A'}
                                         </td>
-                                        <td style={{ ...tdStyle, fontSize: '12px', color: '#64748b' }}>
-                                            {formatDate(order.createdAt)}
+                                        <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
+                                            {(() => {
+                                                const { date, time } = formatOrderDate(order.createdAt);
+                                                return (
+                                                    <div>
+                                                        <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '11.5px' }}>{date}</div>
+                                                        {time && <div style={{ fontSize: '10.5px', color: '#64748b' }}>{time}</div>}
+                                                    </div>
+                                                );
+                                            })()}
                                         </td>
-                                        {isAdmin && (
-                                            <td style={tdStyle} title={order.tenantId}>
-                                                <span style={{ fontFamily: 'monospace', fontSize: '12px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
-                                                    {order.tenantId?.substring(0, 8)}...
-                                                </span>
-                                            </td>
-                                        )}
+                                        {isAdmin && (() => {
+                                            const tDisplay = getTenantDisplay(order);
+                                            return (
+                                                <td style={tdStyle} title={`Tenant: ${tDisplay.name}\nTenant ID: ${order.tenantId || 'N/A'}`}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                        <span style={{ fontWeight: '700', color: '#0f172a', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span>🏢</span>
+                                                            <span>{tDisplay.name}</span>
+                                                        </span>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            {tDisplay.code && (
+                                                                <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#b89620', fontWeight: '700', border: '1px solid #fde68a' }}>
+                                                                    {tDisplay.code}
+                                                                </span>
+                                                            )}
+                                                            {order.tenantId && (
+                                                                <span style={{ fontSize: '10px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                                                                    {order.tenantId.substring(0, 8)}...
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            );
+                                        })()}
                                         <td style={tdStyle}>
-                                            <div style={{ fontWeight: '600', color: '#0f172a' }}>{order.customerName || 'N/A'}</div>
+                                            <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '12px', lineHeight: '1.2' }}>{order.customerName || 'N/A'}</div>
                                             {order.customerEmail && (
-                                                <div style={{ fontSize: '12px', color: '#64748b' }}>{order.customerEmail}</div>
+                                                <div style={{ fontSize: '11px', color: '#64748b', wordBreak: 'break-all', marginTop: '2px', lineHeight: '1.2' }}>{order.customerEmail}</div>
+                                            )}
+                                            {(order.customerPhone || order.phone) && (
+                                                <div style={{ fontSize: '10.5px', color: '#059669', marginTop: '2px', fontWeight: '500' }}>📞 {order.customerPhone || order.phone}</div>
                                             )}
                                         </td>
                                         <td style={tdStyle}>
                                             {order.items && order.items.length > 0 ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11.5px', lineHeight: '1.3' }}>
                                                     {order.items.slice(0, 2).map((item, idx) => (
-                                                        <div key={idx} style={{ fontSize: '13px', whiteSpace: 'normal', maxWidth: '270px' }}>
-                                                            <strong>{item.productCode}</strong> - {item.productName}
+                                                        <div key={idx} style={{ wordBreak: 'break-word' }}>
+                                                            <strong style={{ color: '#0f172a' }}>{item.productCode}</strong> - {item.productName}
                                                             {item.variantName && item.variantName !== 'Default Title' ? ` (${item.variantName})` : ''}
                                                             <span style={{ color: '#64748b', fontWeight: '600' }}> x{item.quantity || 1}</span>
                                                         </div>
                                                     ))}
                                                     {order.items.length > 2 && (
-                                                        <span style={{ fontSize: '12px', color: '#3b82f6', fontWeight: '600' }}>
+                                                        <span style={{ fontSize: '11px', color: '#3b82f6', fontWeight: '600' }}>
                                                             +{order.items.length - 2} more item{order.items.length - 2 > 1 ? 's' : ''}
                                                         </span>
                                                     )}
                                                 </div>
                                             ) : (
-                                                <span style={{ color: '#94a3b8' }}>No items</span>
+                                                <span style={{ color: '#94a3b8', fontSize: '11px' }}>No items</span>
                                             )}
                                         </td>
                                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: '700' }}>{totalQty}</td>
                                         {isAdmin ? (
                                             <>
-                                                <td style={tdStyle}>{formatCurrency(order.totalPurchasePrice)}</td>
-                                                <td style={{ ...tdStyle, fontWeight: '600', color: '#0f172a' }}>{formatCurrency(order.totalSellingPrice)}</td>
-                                                <td style={{ ...tdStyle, fontWeight: '700', color: '#16a34a' }}>{formatCurrency(order.totalAdminProfit)}</td>
+                                                <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{formatCurrency(order.totalPurchasePrice)}</td>
+                                                <td style={{ ...tdStyle, fontWeight: '600', color: '#0f172a', whiteSpace: 'nowrap' }}>{formatCurrency(order.totalSellingPrice)}</td>
+                                                <td style={{ ...tdStyle, fontWeight: '700', color: '#16a34a', whiteSpace: 'nowrap' }}>{formatCurrency(order.totalAdminProfit)}</td>
                                             </>
                                         ) : (
                                             <>
-                                                <td style={tdStyle}>{formatCurrency(order.totalBasePrice)}</td>
-                                                <td style={{ ...tdStyle, fontWeight: '600', color: '#0f172a' }}>{formatCurrency(order.totalSellingPrice)}</td>
-                                                <td style={{ ...tdStyle, fontWeight: '700', color: '#16a34a' }}>{formatCurrency(order.totalProfit)}</td>
+                                                <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{formatCurrency(order.totalBasePrice)}</td>
+                                                <td style={{ ...tdStyle, fontWeight: '600', color: '#0f172a', whiteSpace: 'nowrap' }}>{formatCurrency(order.totalSellingPrice)}</td>
+                                                <td style={{ ...tdStyle, fontWeight: '700', color: '#16a34a', whiteSpace: 'nowrap' }}>{formatCurrency(order.totalProfit)}</td>
                                             </>
                                         )}
 
                                         {/* INLINE STATUS SELECTOR & BADGE */}
                                         <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '130px' }}>
                                                 {renderStatusBadge(normStatus, 'small')}
                                                 <select
                                                     value={normStatus}
                                                     disabled={isRowUpdating}
                                                     onChange={(e) => handleUpdateStatus(order.id, e.target.value)}
                                                     style={{
-                                                        fontSize: '11px',
+                                                        fontSize: '10.5px',
                                                         fontWeight: '600',
-                                                        padding: '3px 6px',
-                                                        borderRadius: '6px',
+                                                        padding: '2px 4px',
+                                                        borderRadius: '5px',
                                                         border: '1px solid #cbd5e1',
                                                         backgroundColor: '#fff',
                                                         color: '#334155',
                                                         cursor: isRowUpdating ? 'not-allowed' : 'pointer',
-                                                        outline: 'none'
+                                                        outline: 'none',
+                                                        width: '100%'
                                                     }}
                                                 >
                                                     {ORDER_STATUSES.map((st) => (
@@ -1281,8 +1893,8 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
                                                     setSelectedOrder(order);
                                                 }}
                                                 style={{
-                                                    padding: '6px 14px',
-                                                    fontSize: '12px',
+                                                    padding: '5px 10px',
+                                                    fontSize: '11px',
                                                     fontWeight: '700',
                                                     borderRadius: '6px',
                                                     backgroundColor: '#eff6ff',
@@ -1307,8 +1919,8 @@ export default function TenantOrders({ tenantId, isAdmin = false }) {
 }
 
 const thStyle = {
-    padding: '12px 18px',
-    fontSize: '12px',
+    padding: '10px 8px',
+    fontSize: '11px',
     fontWeight: '700',
     color: '#64748b',
     textTransform: 'uppercase',
@@ -1317,10 +1929,10 @@ const thStyle = {
 };
 
 const tdStyle = {
-    padding: '14px 18px',
-    fontSize: '13px',
+    padding: '10px 8px',
+    fontSize: '12px',
     color: '#475569',
-    whiteSpace: 'nowrap'
+    verticalAlign: 'middle'
 };
 
 const detailCardStyle = {

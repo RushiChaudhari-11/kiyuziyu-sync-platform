@@ -12,6 +12,10 @@ public class TenantOrder {
     private String customerEmail;
     private String customerPhone;
     private String shippingAddress;
+    private String billingAddress;
+    private String customerNote;
+    private String paymentMethod;
+    private String shippingMethod;
     private Double totalBasePrice;
     private Double totalSellingPrice;
     private Double totalProfit;
@@ -68,6 +72,18 @@ public class TenantOrder {
 
     public String getShippingAddress() { return shippingAddress; }
     public void setShippingAddress(String shippingAddress) { this.shippingAddress = shippingAddress; }
+
+    public String getBillingAddress() { return billingAddress; }
+    public void setBillingAddress(String billingAddress) { this.billingAddress = billingAddress; }
+
+    public String getCustomerNote() { return customerNote; }
+    public void setCustomerNote(String customerNote) { this.customerNote = customerNote; }
+
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+
+    public String getShippingMethod() { return shippingMethod; }
+    public void setShippingMethod(String shippingMethod) { this.shippingMethod = shippingMethod; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
