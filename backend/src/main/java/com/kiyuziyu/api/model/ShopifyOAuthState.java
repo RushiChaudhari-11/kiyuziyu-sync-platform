@@ -9,15 +9,21 @@ public class ShopifyOAuthState {
     private String tenantId;
     private String shopDomain;
     private long expiryTimestamp;
+    private String redirectOrigin;
 
     public ShopifyOAuthState() {
     }
 
     public ShopifyOAuthState(String stateId, String tenantId, String shopDomain, long expiryTimestamp) {
+        this(stateId, tenantId, shopDomain, expiryTimestamp, null);
+    }
+
+    public ShopifyOAuthState(String stateId, String tenantId, String shopDomain, long expiryTimestamp, String redirectOrigin) {
         this.stateId = stateId;
         this.tenantId = tenantId;
         this.shopDomain = shopDomain;
         this.expiryTimestamp = expiryTimestamp;
+        this.redirectOrigin = redirectOrigin;
     }
 
     public String getStateId() {
@@ -50,5 +56,13 @@ public class ShopifyOAuthState {
 
     public void setExpiryTimestamp(long expiryTimestamp) {
         this.expiryTimestamp = expiryTimestamp;
+    }
+
+    public String getRedirectOrigin() {
+        return redirectOrigin;
+    }
+
+    public void setRedirectOrigin(String redirectOrigin) {
+        this.redirectOrigin = redirectOrigin;
     }
 }

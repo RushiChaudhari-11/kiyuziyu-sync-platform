@@ -20,5 +20,11 @@ shopify:
   store-domain: ${SHOPIFY_STORE_DOMAIN:}
   access-token: ${SHOPIFY_ACCESS_TOKEN:}
   client-id: ${SHOPIFY_CLIENT_ID:50616f42c3e0cfbb5ba9f29a2143acf6}
-  client-secret: ${SHOPIFY_CLIENT_SECRET:your_client_secret_here}
+  client-secret: ${SHOPIFY_CLIENT_SECRET:}
+  webhook-secret: ${SHOPIFY_WEBHOOK_SECRET:}
   api-version: ${SHOPIFY_API_VERSION:2026-07}
+  oauth:
+    redirect-uri: ${SHOPIFY_REDIRECT_URI:https://kiyuziyu-api-703805908757.asia-south1.run.app/api/v1/shopify/oauth/callback}
+    scopes: ${SHOPIFY_SCOPES:write_products,write_inventory}
+    frontend-url: ${FRONTEND_URL:http://localhost:3000}
+

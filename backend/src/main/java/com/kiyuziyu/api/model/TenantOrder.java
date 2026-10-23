@@ -16,6 +16,7 @@ public class TenantOrder {
     private String customerNote;
     private String paymentMethod;
     private String shippingMethod;
+    private String currency;
     private Double totalBasePrice;
     private Double totalSellingPrice;
     private Double totalProfit;
@@ -84,6 +85,9 @@ public class TenantOrder {
 
     public String getShippingMethod() { return shippingMethod; }
     public void setShippingMethod(String shippingMethod) { this.shippingMethod = shippingMethod; }
+
+    public String getCurrency() { return currency; }
+    public void setCurrency(String currency) { this.currency = currency; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

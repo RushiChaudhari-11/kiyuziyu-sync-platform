@@ -91,6 +91,22 @@ public class ProductRepository {
         }
         long t0 = System.currentTimeMillis();
         Map<String, DocumentSnapshot> cache = new HashMap<>();
+
+        // Fast path: check root collection "products" if exists
+        try {
+            DocumentSnapshot rootDoc = firestore.collection("products").document(productId.trim()).get().get();
+            if (rootDoc.exists()) {
+                Product p = rootDoc.toObject(Product.class);
+                if (p != null) {
+                    p.setId(rootDoc.getId());
+                    if (rootDoc.contains("purchaseRate")) {
+                        p.setPurchaseRate(rootDoc.get("purchaseRate"));
+                    }
+                    return p;
+                }
+            }
+        } catch (Exception ignored) {}
+
         Iterable<DocumentReference> collections = firestore.collection("collections").listDocuments();
         for (DocumentReference colRef : collections) {
             Iterable<DocumentReference> subcollections = colRef.collection("subcollections").listDocuments();
@@ -101,6 +117,9 @@ public class ProductRepository {
                     Product p = doc.toObject(Product.class);
                     if (p != null) {
                         p.setId(doc.getId());
+                        if (doc.contains("purchaseRate")) {
+                            p.setPurchaseRate(doc.get("purchaseRate"));
+                        }
                         String[] parts = doc.getReference().getPath().split("/");
                         if (parts.length >= 6 && "collections".equals(parts[0]) && "subcollections".equals(parts[2])) {
                             p.setCollectionId(parts[1]);

@@ -5,6 +5,7 @@ public class UpdateShopifyConnectionRequest {
     private String status;
     private String shopifyStoreDomain;
     private String shopifyStoreId;
+    private String accessToken;
 
     public UpdateShopifyConnectionRequest() {
     }
@@ -35,5 +36,13 @@ public class UpdateShopifyConnectionRequest {
 
     public void setShopifyStoreId(String shopifyStoreId) {
         this.shopifyStoreId = shopifyStoreId;
+    }
+
+    public String getAccessToken() {
+        return accessToken;
+    }
+
+    public void setAccessToken(String accessToken) {
+        this.accessToken = accessToken;
     }
 }

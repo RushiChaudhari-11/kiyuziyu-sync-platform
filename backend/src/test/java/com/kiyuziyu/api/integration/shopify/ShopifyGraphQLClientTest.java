@@ -697,14 +697,25 @@ class ShopifyGraphQLClientTest {
         verify(restTemplate).postForEntity(anyString(), captor.capture(), eq(Map.class));
 
         Map<String, Object> body = (Map<String, Object>) captor.getValue().getBody();
-        assertTrue(((String) body.get("query")).contains("inventorySetQuantities"));
+        String query = (String) body.get("query");
+        assertTrue(query.contains("inventorySetQuantities"), "Query should contain inventorySetQuantities");
+        assertTrue(query.contains("@idempotent(key: $idempotencyKey)"), "Mutation should include @idempotent(key: $idempotencyKey)");
+        assertTrue(query.contains("$idempotencyKey: String!"), "Mutation should declare $idempotencyKey variable");
+
         Map<String, Object> vars = (Map<String, Object>) body.get("variables");
+        assertNotNull(vars.get("idempotencyKey"), "Variables must contain top-level idempotencyKey");
+        assertNotNull(vars.get("input"), "Variables must contain top-level input");
+
         Map<String, Object> input = (Map<String, Object>) vars.get("input");
+        assertNull(input.get("idempotencyKey"), "idempotencyKey must NOT be inside input map");
+
         List<Map<String, Object>> quantities = (List<Map<String, Object>>) input.get("quantities");
         assertEquals(1, quantities.size());
         assertEquals(15, quantities.get(0).get("quantity"));
         assertEquals("gid://shopify/InventoryItem/555", quantities.get(0).get("inventoryItemId"));
         assertEquals("gid://shopify/Location/2", quantities.get(0).get("locationId"));
+        assertTrue(quantities.get(0).containsKey("changeFromQuantity"), "Quantity item must include changeFromQuantity entry");
+        assertNull(quantities.get(0).get("changeFromQuantity"), "changeFromQuantity should be null when opting out");
     }
 
     // -----------------------------------------------------------------------
@@ -1192,6 +1203,229 @@ class ShopifyGraphQLClientTest {
         );
 
         assertTrue(ex.getMessage().contains("is not in expected Shopify collection 'Watch Bracelet'"));
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 38: activateInventoryAtLocation - successful activation with variables
+    // -----------------------------------------------------------------------
+    @Test
+    void testActivateInventoryAtLocation_Success() {
+        org.mockito.ArgumentCaptor<HttpEntity> captor = org.mockito.ArgumentCaptor.forClass(HttpEntity.class);
+        when(restTemplate.postForEntity(anyString(), captor.capture(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("data", Map.of("inventoryActivate", Map.of(
+                        "inventoryLevel", Map.of("id", "gid://shopify/InventoryLevel/100"),
+                        "userErrors", Collections.emptyList()
+                )))));
+
+        assertDoesNotThrow(() -> client.activateInventoryAtLocation("gid://shopify/InventoryItem/555", "gid://shopify/Location/1"));
+
+        HttpEntity entity = captor.getValue();
+        assertNotNull(entity);
+        Map<String, Object> body = (Map<String, Object>) entity.getBody();
+        assertNotNull(body);
+        String query = (String) body.get("query");
+        assertTrue(query.contains("mutation ActivateInventory"));
+        assertTrue(query.contains("@idempotent(key: $idempotencyKey)"));
+
+        Map<String, Object> vars = (Map<String, Object>) body.get("variables");
+        assertNotNull(vars);
+        assertEquals("gid://shopify/InventoryItem/555", vars.get("inventoryItemId"));
+        assertEquals("gid://shopify/Location/1", vars.get("locationId"));
+        assertNotNull(vars.get("idempotencyKey"));
+        assertFalse(vars.get("idempotencyKey").toString().isEmpty());
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 39: activateInventoryAtLocation - missing or invalid IDs
+    // -----------------------------------------------------------------------
+    @Test
+    void testActivateInventoryAtLocation_MissingOrInvalidIds_ThrowsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () ->
+                client.activateInventoryAtLocation(null, "gid://shopify/Location/1"));
+        assertThrows(IllegalArgumentException.class, () ->
+                client.activateInventoryAtLocation("   ", "gid://shopify/Location/1"));
+        assertThrows(IllegalArgumentException.class, () ->
+                client.activateInventoryAtLocation("gid://shopify/InventoryItem/555", null));
+        assertThrows(IllegalArgumentException.class, () ->
+                client.activateInventoryAtLocation("gid://shopify/InventoryItem/555", "   "));
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 40: activateInventoryAtLocation - already active error is handled gracefully without throwing
+    // -----------------------------------------------------------------------
+    @Test
+    void testActivateInventoryAtLocation_AlreadyActive_DoesNotThrow() {
+        when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("data", Map.of("inventoryActivate", Map.of(
+                        "userErrors", List.of(Map.of("field", List.of("inventoryItemId"), "message", "The inventory item is already stocked at this location."))
+                )))));
+
+        assertDoesNotThrow(() -> client.activateInventoryAtLocation("gid://shopify/InventoryItem/555", "gid://shopify/Location/1"));
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 41: activateInventoryAtLocation - other userError throws ShopifyGraphQLException
+    // -----------------------------------------------------------------------
+    @Test
+    void testActivateInventoryAtLocation_OtherUserError_ThrowsShopifyGraphQLException() {
+        when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("data", Map.of("inventoryActivate", Map.of(
+                        "userErrors", List.of(Map.of("field", List.of("locationId"), "message", "Location does not exist or access denied."))
+                )))));
+
+        ShopifyGraphQLException ex = assertThrows(ShopifyGraphQLException.class, () ->
+                client.activateInventoryAtLocation("gid://shopify/InventoryItem/555", "gid://shopify/Location/999")
+        );
+        assertTrue(ex.getMessage().contains("Location does not exist or access denied"));
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 42: activateInventoryAtLocation - retry using the same idempotency key
+    // -----------------------------------------------------------------------
+    @Test
+    void testActivateInventoryAtLocation_RetryUsesSameIdempotencyKey() {
+        org.mockito.ArgumentCaptor<HttpEntity> captor = org.mockito.ArgumentCaptor.forClass(HttpEntity.class);
+        when(restTemplate.postForEntity(anyString(), captor.capture(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("data", Map.of("inventoryActivate", Map.of(
+                        "inventoryLevel", Map.of("id", "gid://shopify/InventoryLevel/100"),
+                        "userErrors", Collections.emptyList()
+                )))));
+
+        String invItem = "gid://shopify/InventoryItem/777";
+        String locId = "gid://shopify/Location/2";
+
+        // Initial execution
+        client.activateInventoryAtLocation(invItem, locId);
+        // Retry execution of same operation
+        client.activateInventoryAtLocation(invItem, locId);
+
+        List<HttpEntity> captured = captor.getAllValues();
+        assertEquals(2, captured.size());
+
+        Map<String, Object> body1 = (Map<String, Object>) captured.get(0).getBody();
+        Map<String, Object> vars1 = (Map<String, Object>) body1.get("variables");
+        String key1 = (String) vars1.get("idempotencyKey");
+
+        Map<String, Object> body2 = (Map<String, Object>) captured.get(1).getBody();
+        Map<String, Object> vars2 = (Map<String, Object>) body2.get("variables");
+        String key2 = (String) vars2.get("idempotencyKey");
+
+        assertNotNull(key1);
+        assertFalse(key1.isEmpty());
+        assertEquals(key1, key2, "Retry of same operation must reuse original idempotency key");
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 43: activateInventoryAtLocation - GraphQL request failure (top-level errors)
+    // -----------------------------------------------------------------------
+    @Test
+    void testActivateInventoryAtLocation_GraphQLRequestFailure_ThrowsShopifyGraphQLException() {
+        when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("errors", List.of(
+                        Map.of("message", "The @idempotent directive is required for this mutation but was not provided.")
+                ))));
+
+        ShopifyGraphQLException ex = assertThrows(ShopifyGraphQLException.class, () ->
+                client.activateInventoryAtLocation("gid://shopify/InventoryItem/555", "gid://shopify/Location/1")
+        );
+        assertTrue(ex.getMessage().contains("The @idempotent directive is required"));
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 44: setInventoryQuantity - userErrors throws ShopifyGraphQLException
+    // -----------------------------------------------------------------------
+    @Test
+    void testSetInventoryQuantity_UserErrors_ThrowsShopifyGraphQLException() {
+        when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("data", Map.of("inventorySetQuantities", Map.of(
+                        "userErrors", List.of(Map.of("field", List.of("quantities"), "message", "Quantity cannot be updated."))
+                )))));
+
+        ShopifyGraphQLException ex = assertThrows(ShopifyGraphQLException.class, () ->
+                client.setInventoryQuantity("gid://shopify/InventoryItem/555", "gid://shopify/Location/1", 6)
+        );
+        assertTrue(ex.getMessage().contains("Quantity cannot be updated"));
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 45: setInventoryQuantity with explicit changeFromQuantity
+    // -----------------------------------------------------------------------
+    @Test
+    @SuppressWarnings("unchecked")
+    void testSetInventoryQuantity_WithExplicitChangeFromQuantity() {
+        Map<String, Object> qtyData = Map.of("inventorySetQuantities", Map.of(
+                "inventoryAdjustmentGroup", Map.of("reason", "correction"),
+                "userErrors", Collections.emptyList()
+        ));
+        org.mockito.ArgumentCaptor<HttpEntity> captor = org.mockito.ArgumentCaptor.forClass(HttpEntity.class);
+        when(restTemplate.postForEntity(anyString(), captor.capture(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("data", qtyData)));
+
+        client.setInventoryQuantity("gid://shopify/InventoryItem/555", "gid://shopify/Location/2", 20, 10);
+
+        Map<String, Object> body = (Map<String, Object>) captor.getValue().getBody();
+        Map<String, Object> vars = (Map<String, Object>) body.get("variables");
+        Map<String, Object> input = (Map<String, Object>) vars.get("input");
+        List<Map<String, Object>> quantities = (List<Map<String, Object>>) input.get("quantities");
+        assertEquals(20, quantities.get(0).get("quantity"));
+        assertEquals(10, quantities.get(0).get("changeFromQuantity"));
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 46: setInventoryQuantity retry reuses same idempotency key
+    // -----------------------------------------------------------------------
+    @Test
+    @SuppressWarnings("unchecked")
+    void testSetInventoryQuantity_RetryUsesSameIdempotencyKey() {
+        Map<String, Object> qtyData = Map.of("inventorySetQuantities", Map.of(
+                "inventoryAdjustmentGroup", Map.of("reason", "correction"),
+                "userErrors", Collections.emptyList()
+        ));
+        org.mockito.ArgumentCaptor<HttpEntity> captor = org.mockito.ArgumentCaptor.forClass(HttpEntity.class);
+        when(restTemplate.postForEntity(anyString(), captor.capture(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("data", qtyData)));
+
+        String invItem = "gid://shopify/InventoryItem/888";
+        String locId = "gid://shopify/Location/2";
+
+        // Initial execution
+        client.setInventoryQuantity(invItem, locId, 30);
+        // Retry execution
+        client.setInventoryQuantity(invItem, locId, 30);
+
+        List<HttpEntity> captured = captor.getAllValues();
+        assertEquals(2, captured.size());
+
+        Map<String, Object> body1 = (Map<String, Object>) captured.get(0).getBody();
+        Map<String, Object> vars1 = (Map<String, Object>) body1.get("variables");
+        String key1 = (String) vars1.get("idempotencyKey");
+
+        Map<String, Object> body2 = (Map<String, Object>) captured.get(1).getBody();
+        Map<String, Object> vars2 = (Map<String, Object>) body2.get("variables");
+        String key2 = (String) vars2.get("idempotencyKey");
+
+        assertNotNull(key1);
+        assertFalse(key1.isEmpty());
+        assertEquals(key1, key2, "Retry of same inventorySetQuantities operation must reuse original idempotency key");
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 47: getCurrentInventoryQuantity fetches available quantity from inventoryLevels
+    // -----------------------------------------------------------------------
+    @Test
+    void testGetCurrentInventoryQuantity_Success() {
+        Map<String, Object> levelNode = Map.of(
+                "quantities", List.of(Map.of("quantity", 42))
+        );
+        Map<String, Object> edge = Map.of("node", levelNode);
+        Map<String, Object> inventoryItemData = Map.of(
+                "inventoryLevels", Map.of("edges", List.of(edge))
+        );
+        when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("data", Map.of("inventoryItem", inventoryItemData))));
+
+        Integer qty = client.getCurrentInventoryQuantity("gid://shopify/InventoryItem/999", "gid://shopify/Location/1");
+        assertEquals(42, qty);
     }
 }
 

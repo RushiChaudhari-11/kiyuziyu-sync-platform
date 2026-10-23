@@ -152,17 +152,30 @@ public class ShopifyConnectionService {
      * GET /api/v1/tenants/me/shopify-connection
      * Get Shopify connection for current tenant.
      */
-    public ShopifyConnectionResponse getTenantConnection(FirebaseToken token) throws ExecutionException, InterruptedException {
-        String tenantId = resolveTenantId(token);
-        ShopifyConnection connection = shopifyConnectionRepository.findByTenantId(tenantId);
-        if (connection == null) {
-            Store store = getOrCreatePrimaryTenantStore(tenantId);
-            connection = shopifyConnectionRepository.findByStoreId(tenantId, store.getStoreId());
-        }
-        if (connection == null) {
+    public ShopifyConnectionResponse getTenantConnection(FirebaseToken token) {
+        try {
+            String tenantId = resolveTenantId(token);
+            ShopifyConnection connection = shopifyConnectionRepository.findByTenantId(tenantId);
+            if (connection == null) {
+                try {
+                    Store store = getOrCreatePrimaryTenantStore(tenantId);
+                    if (store != null) {
+                        connection = shopifyConnectionRepository.findByStoreId(tenantId, store.getStoreId());
+                    }
+                } catch (Exception storeEx) {
+                    log.warn("[ShopifyConnectionService] Could not resolve store for tenant {}: {}", tenantId, storeEx.getMessage());
+                }
+            }
+            if (connection == null) {
+                return null;
+            }
+            return mapToResponse(connection);
+        } catch (NotFoundException | ForbiddenException fe) {
+            throw fe;
+        } catch (Exception e) {
+            log.warn("[ShopifyConnectionService] Failed to retrieve Shopify connection: {}", e.getMessage());
             return null;
         }
-        return mapToResponse(connection);
     }
 
     /**
@@ -179,14 +192,23 @@ public class ShopifyConnectionService {
         String normalizedDomain = normalizeAndValidateDomain(request.getShopifyStoreDomain());
         Store store = getOrCreatePrimaryTenantStore(tenantId);
 
+        String tokenToSet = request.getAccessToken() != null ? request.getAccessToken().trim() : null;
+        if (tokenToSet != null && tokenToSet.isEmpty()) {
+            tokenToSet = null;
+        }
+
         ShopifyConnection existing = shopifyConnectionRepository.findByTenantId(tenantId);
         if (existing != null && ShopifyConnectionStatus.CONNECTED.name().equalsIgnoreCase(existing.getStatus())) {
             if (normalizedDomain.equalsIgnoreCase(existing.getShopifyStoreDomain())) {
+                if (tokenToSet != null) {
+                    existing.setAccessToken(tokenToSet);
+                    existing.setUpdatedAt(Instant.now().toString());
+                    shopifyConnectionRepository.save(existing);
+                    log.info("[ShopifyConnectionService] Updated access token for tenantId={}, domain={}", tenantId, normalizedDomain);
+                }
                 return mapToResponse(existing);
             }
         }
-
-
 
         String connectionId = existing != null ? existing.getConnectionId() : "sc_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String now = Instant.now().toString();
@@ -201,6 +223,12 @@ public class ShopifyConnectionService {
                 existing != null ? existing.getConnectedAt() : now,
                 now
         );
+
+        if (tokenToSet != null) {
+            connection.setAccessToken(tokenToSet);
+        } else if (existing != null && existing.getAccessToken() != null) {
+            connection.setAccessToken(existing.getAccessToken());
+        }
 
         shopifyConnectionRepository.save(connection);
 
@@ -262,6 +290,10 @@ public class ShopifyConnectionService {
                 now,
                 now
         );
+
+        if (request.getAccessToken() != null && !request.getAccessToken().trim().isEmpty()) {
+            connection.setAccessToken(request.getAccessToken().trim());
+        }
 
         shopifyConnectionRepository.save(connection);
 
@@ -327,6 +359,10 @@ public class ShopifyConnectionService {
             connection.setShopifyStoreId(request.getShopifyStoreId().trim());
         }
 
+        if (request.getAccessToken() != null && !request.getAccessToken().trim().isEmpty()) {
+            connection.setAccessToken(request.getAccessToken().trim());
+        }
+
         connection.setUpdatedAt(Instant.now().toString());
         shopifyConnectionRepository.save(connection);
 
@@ -357,8 +393,8 @@ public class ShopifyConnectionService {
     }
 
     private ShopifyConnectionResponse mapToResponse(ShopifyConnection conn) {
-        boolean hasSecret = false;
         boolean connected = ShopifyConnectionStatus.CONNECTED.name().equalsIgnoreCase(conn.getStatus());
+        boolean hasAccessToken = conn.getAccessToken() != null && !conn.getAccessToken().trim().isEmpty();
         return new ShopifyConnectionResponse(
                 conn.getConnectionId(),
                 conn.getTenantId(),
@@ -368,7 +404,8 @@ public class ShopifyConnectionService {
                 connected,
                 conn.getStatus(),
                 conn.getConnectedAt(),
-                conn.getUpdatedAt()
+                conn.getUpdatedAt(),
+                hasAccessToken
         );
     }
 

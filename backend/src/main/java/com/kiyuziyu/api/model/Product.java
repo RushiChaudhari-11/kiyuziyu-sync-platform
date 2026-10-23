@@ -1,8 +1,10 @@
 package com.kiyuziyu.api.model;
 
+import com.google.cloud.firestore.annotation.IgnoreExtraProperties;
 import java.util.List;
 import java.util.Map;
 
+@IgnoreExtraProperties
 public class Product {
     private String id;
     private String productName;
@@ -11,9 +13,13 @@ public class Product {
     private Object initialQuantity;
     private String image;
     private List<Object> images;
+    private List<Object> additionalImages;
     private List<String> tags;
     private List<Map<String, Object>> variations;
     private Object purchaseRate;
+    private Object createdAt;
+    private Object updatedAt;
+    private String mainCollection;
 
     // Computed or fetched from subcollection
     private String collectionId;
@@ -167,5 +173,37 @@ public class Product {
 
     public void setSubcollectionData(Map<String, Object> subcollectionData) {
         this.subcollectionData = subcollectionData;
+    }
+
+    public List<Object> getAdditionalImages() {
+        return additionalImages;
+    }
+
+    public void setAdditionalImages(List<Object> additionalImages) {
+        this.additionalImages = additionalImages;
+    }
+
+    public Object getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Object createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Object getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(Object updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public String getMainCollection() {
+        return mainCollection;
+    }
+
+    public void setMainCollection(String mainCollection) {
+        this.mainCollection = mainCollection;
     }
 }

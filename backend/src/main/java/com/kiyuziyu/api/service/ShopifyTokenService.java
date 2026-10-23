@@ -1,25 +1,25 @@
 package com.kiyuziyu.api.service;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ShopifyTokenService {
 
     private static final Logger log = LoggerFactory.getLogger(ShopifyTokenService.class);
 
-    @Value("${shopify.client-id:}")
+    @Value("${shopify.client-id:50616f42c3e0cfbb5ba9f29a2143acf6}")
     private String clientId;
 
     @Value("${shopify.client-secret:}")
@@ -27,6 +27,10 @@ public class ShopifyTokenService {
 
     @Autowired
     private com.kiyuziyu.api.repository.ShopifyConnectionRepository shopifyConnectionRepository;
+
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private ShopifyOAuthService shopifyOAuthService;
 
     public ShopifyTokenService() {
     }
@@ -51,38 +55,70 @@ public class ShopifyTokenService {
 
         long currentTimeSeconds = Instant.now().getEpochSecond();
         
-        // If we don't have an expiry, assume it's a permanent token from an older flow
+        // If we don't have an expiry timestamp:
         if (conn.getAccessTokenExpiresAt() == null || conn.getAccessTokenExpiresAt() == 0) {
+            // If we have a refresh token, refresh immediately to acquire a compliant expiring offline token
+            if (conn.getRefreshToken() != null && !conn.getRefreshToken().trim().isEmpty()) {
+                log.info("[ShopifyTokenService] Token for {} has no expiry recorded but has refresh token. Refreshing for modern expiring token.", shopDomain);
+                return refreshAccessToken(conn, shopDomain, currentTimeSeconds);
+            }
             return conn.getAccessToken();
         }
 
-        // Buffer of 300 seconds (5 minutes)
+        // Buffer of 300 seconds (5 minutes) before expiration
         if (currentTimeSeconds < conn.getAccessTokenExpiresAt() - 300) {
             return conn.getAccessToken();
         }
 
         log.info("[ShopifyTokenService] Access token for {} is expired or near expiry. Attempting to refresh.", shopDomain);
-        
-        if (conn.getRefreshToken() == null || conn.getRefreshToken().isEmpty()) {
-            conn.setStatus("UNAUTHORIZED");
-            shopifyConnectionRepository.save(conn);
-            throw new RuntimeException("Shopify connection for domain " + shopDomain + " has expired and has no refresh token. Re-authorization required.");
+        return refreshAccessToken(conn, shopDomain, currentTimeSeconds);
+    }
+
+    /**
+     * Force refresh the access token using the stored refresh token.
+     */
+    public synchronized String forceRefreshToken(String shopDomain) {
+        if (shopDomain == null || shopDomain.trim().isEmpty()) {
+            throw new RuntimeException("Shop domain is required to refresh access token.");
         }
 
-        // Perform the refresh
+        com.kiyuziyu.api.model.ShopifyConnection conn = shopifyConnectionRepository.findByShopifyStoreDomain(shopDomain);
+        if (conn == null) {
+            throw new RuntimeException("No active Shopify connection found for domain: " + shopDomain);
+        }
+
+        return refreshAccessToken(conn, shopDomain, Instant.now().getEpochSecond());
+    }
+
+    private String refreshAccessToken(com.kiyuziyu.api.model.ShopifyConnection conn, String shopDomain, long currentTimeSeconds) {
+        if (conn.getRefreshToken() == null || conn.getRefreshToken().trim().isEmpty()) {
+            conn.setStatus("UNAUTHORIZED");
+            shopifyConnectionRepository.save(conn);
+            throw new RuntimeException("Shopify connection for domain " + shopDomain + " has no refresh token. Re-authorization required.");
+        }
+
         RestTemplate restTemplate = new RestTemplate();
         String url = "https://" + shopDomain + "/admin/oauth/access_token";
         
-        Map<String, String> body = new java.util.HashMap<>();
-        body.put("client_id", clientId);
-        body.put("client_secret", clientSecret);
-        body.put("grant_type", "refresh_token");
-        body.put("refresh_token", conn.getRefreshToken());
-        
+        String effectiveSecret = clientSecret;
+        if (shopifyOAuthService != null) {
+            String resolved = shopifyOAuthService.resolveClientSecret();
+            if (resolved != null && !resolved.isEmpty()) {
+                effectiveSecret = resolved;
+            }
+        }
+
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("client_id", (clientId != null && !clientId.isEmpty()) ? clientId : "50616f42c3e0cfbb5ba9f29a2143acf6");
+        body.add("client_secret", effectiveSecret);
+        body.add("grant_type", "refresh_token");
+        body.add("refresh_token", conn.getRefreshToken().trim());
         
-        HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
         
         try {
             ResponseEntity<Map> response = restTemplate.postForEntity(url, request, Map.class);
@@ -93,23 +129,26 @@ public class ShopifyTokenService {
                 Object expiresInObj = response.getBody().get("expires_in");
                 Object refreshExpiresInObj = response.getBody().get("refresh_token_expires_in");
                 
-                if (newToken != null) {
-                    conn.setAccessToken(newToken);
-                    if (newRefreshToken != null) {
-                        conn.setRefreshToken(newRefreshToken);
+                if (newToken != null && !newToken.trim().isEmpty()) {
+                    conn.setAccessToken(newToken.trim());
+                    if (newRefreshToken != null && !newRefreshToken.trim().isEmpty()) {
+                        conn.setRefreshToken(newRefreshToken.trim());
                     }
                     if (expiresInObj != null) {
                         conn.setAccessTokenExpiresAt(currentTimeSeconds + Long.parseLong(String.valueOf(expiresInObj)));
+                    } else {
+                        conn.setAccessTokenExpiresAt(currentTimeSeconds + 3600); // 1 hour default
                     }
                     if (refreshExpiresInObj != null) {
                         conn.setRefreshTokenExpiresAt(currentTimeSeconds + Long.parseLong(String.valueOf(refreshExpiresInObj)));
                     }
+                    conn.setStatus("CONNECTED");
                     conn.setUpdatedAt(Instant.now().toString());
                     
                     shopifyConnectionRepository.save(conn);
                     log.info("[ShopifyTokenService] Successfully refreshed access token for domain: {}", shopDomain);
                     
-                    return newToken;
+                    return newToken.trim();
                 }
             }
             throw new RuntimeException("Failed to refresh Shopify token. Response status: " + response.getStatusCode());
@@ -119,10 +158,11 @@ public class ShopifyTokenService {
                 conn.setStatus("UNAUTHORIZED");
                 shopifyConnectionRepository.save(conn);
             }
-            throw new RuntimeException("Shopify refresh failed. Re-authorization may be required.", e);
+            throw new RuntimeException("Shopify refresh failed (" + e.getStatusCode() + "): " + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
             log.error("[ShopifyTokenService] Unexpected error refreshing token for {}: {}", shopDomain, e.getMessage(), e);
-            throw new RuntimeException("Failed to refresh Shopify token due to network/server error.", e);
+            throw new RuntimeException("Failed to refresh Shopify token: " + e.getMessage(), e);
         }
     }
 }
+

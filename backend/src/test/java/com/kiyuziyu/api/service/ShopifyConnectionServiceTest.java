@@ -199,7 +199,10 @@ class ShopifyConnectionServiceTest {
 
         shopifyConnectionService.deleteConnection(mockToken, "store_5fcd29b2b01c");
 
-        verify(shopifyConnectionRepository).delete("sc_111");
+        verify(shopifyConnectionRepository).save(argThat(conn ->
+                "sc_111".equals(conn.getConnectionId()) &&
+                ShopifyConnectionStatus.DISCONNECTED.name().equals(conn.getStatus())
+        ));
     }
 
     // 7. Store belonging to another tenant -> 403 Forbidden

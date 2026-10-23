@@ -11,6 +11,8 @@ public class TenantOrderItem {
     private Double profit;
     private Double purchasePrice;
     private Double adminProfit;
+    private String collectionId;
+    private String subcollectionId;
 
     public TenantOrderItem() {}
 
@@ -43,4 +45,10 @@ public class TenantOrderItem {
 
     public Double getAdminProfit() { return adminProfit; }
     public void setAdminProfit(Double adminProfit) { this.adminProfit = adminProfit; }
+
+    public String getCollectionId() { return collectionId; }
+    public void setCollectionId(String collectionId) { this.collectionId = collectionId; }
+
+    public String getSubcollectionId() { return subcollectionId; }
+    public void setSubcollectionId(String subcollectionId) { this.subcollectionId = subcollectionId; }
 }

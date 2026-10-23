@@ -18,6 +18,7 @@ export default function TenantProducts() {
   const [products, setProducts] = useState([]);
   const [collections, setCollections] = useState([]);
   const [syncStatuses, setSyncStatuses] = useState({});
+  const [syncErrors, setSyncErrors] = useState({});
   const [productsLoading, setProductsLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   
@@ -103,10 +104,15 @@ export default function TenantProducts() {
         const data = await res.json();
         if (data.success && data.data) {
           const statusMap = {};
+          const errMap = {};
           data.data.forEach(item => {
             statusMap[item.productId] = item.status;
+            if (item.errorMessage) {
+              errMap[item.productId] = item.errorMessage;
+            }
           });
           setSyncStatuses(statusMap);
+          setSyncErrors(errMap);
         }
       }
     } catch (err) {
@@ -226,8 +232,15 @@ export default function TenantProducts() {
               const sd = await sr.json();
               if (sd.success && sd.data) {
                 const statusMap = {};
-                sd.data.forEach(item => { statusMap[item.productId] = item.status; });
+                const errMap = {};
+                sd.data.forEach(item => {
+                  statusMap[item.productId] = item.status;
+                  if (item.errorMessage) {
+                    errMap[item.productId] = item.errorMessage;
+                  }
+                });
                 setSyncStatuses(statusMap);
+                setSyncErrors(errMap);
                 // Check if any of the synced products are still in SYNCING state
                 const stillSyncing = syncedIds.some(id => statusMap[id] === 'SYNCING');
                 if (stillSyncing) {
@@ -342,10 +355,11 @@ export default function TenantProducts() {
 
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'grid', functional: true, path: '/tenant/dashboard' },
+    { id: 'reports', label: 'Analysis Reports', icon: 'bar-chart', functional: true, path: '/tenant/dashboard?tab=reports' },
+    { id: 'orders', label: 'Orders', icon: 'shopping-cart', functional: true, path: '/tenant/dashboard?tab=orders' },
     { id: 'shopify', label: 'Shopify Store', icon: 'shopping-bag', functional: true, path: '/tenant/dashboard?tab=shopify' },
     { id: 'products', label: 'Products', icon: 'package', functional: true, path: '/tenant/products' },
     { id: 'credentials', label: 'API Credentials', icon: 'key', functional: false },
-    { id: 'orders', label: 'Orders', icon: 'shopping-cart', functional: true, path: '/tenant/dashboard?tab=orders' },
     { id: 'profile', label: 'Profile', icon: 'user', functional: false },
   ];
 
@@ -635,6 +649,8 @@ export default function TenantProducts() {
                 </div>
               </div>
 
+
+
               {/* Bulk Update Row */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 24px', 
@@ -787,7 +803,20 @@ export default function TenantProducts() {
                                 />
                               </td>
                               <td style={s.td}>
-                                <span style={{...s.statusBadge, color: statusColor, backgroundColor: statusBg}}>
+                                <span 
+                                  style={{
+                                    ...s.statusBadge, 
+                                    color: statusColor, 
+                                    backgroundColor: statusBg,
+                                    cursor: syncErrors[pId] ? 'pointer' : 'default',
+                                  }}
+                                  title={syncErrors[pId] ? `Sync Error: ${syncErrors[pId]}` : status}
+                                  onClick={() => {
+                                    if (syncErrors[pId]) {
+                                      alert(`Sync Failed for ${p.productCode || p.productName}:\n\n${syncErrors[pId]}`);
+                                    }
+                                  }}
+                                >
                                   {status}
                                 </span>
                               </td>
@@ -904,6 +933,14 @@ function renderIcon(iconType, isActive) {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7" r="4" />
+        </svg>
+      );
+    case 'bar-chart':
+      return (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="20" x2="12" y2="10" />
+          <line x1="18" y1="20" x2="18" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="16" />
         </svg>
       );
     default:

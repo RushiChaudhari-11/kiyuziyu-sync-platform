@@ -85,6 +85,21 @@ public class ShopifyProductMappingRepository {
         return list;
     }
 
+    public List<ShopifyProductMapping> findAllByTenant(String tenantId) throws ExecutionException, InterruptedException {
+        List<ShopifyProductMapping> list = new ArrayList<>();
+        if (firestore == null || tenantId == null || tenantId.trim().isEmpty()) {
+            return list;
+        }
+        QuerySnapshot snap = firestore.collection(COLLECTION_NAME)
+                .whereEqualTo("tenantId", tenantId.trim())
+                .get()
+                .get();
+        for (QueryDocumentSnapshot doc : snap.getDocuments()) {
+            list.add(doc.toObject(ShopifyProductMapping.class));
+        }
+        return list;
+    }
+
     public void delete(String mappingId) throws ExecutionException, InterruptedException {
         if (firestore == null || mappingId == null || mappingId.trim().isEmpty()) {
             return;
@@ -94,5 +109,24 @@ public class ShopifyProductMappingRepository {
                 .delete()
                 .get();
         log.info("[ShopifyProductMappingRepo] Deleted mappingId={}", mappingId);
+    }
+
+    public ShopifyProductMapping findByShopifyProductId(String shopifyProductId) {
+        if (firestore == null || shopifyProductId == null || shopifyProductId.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            QuerySnapshot snap = firestore.collection(COLLECTION_NAME)
+                    .whereEqualTo("shopifyProductId", shopifyProductId.trim())
+                    .limit(1)
+                    .get()
+                    .get();
+            if (!snap.isEmpty()) {
+                return snap.getDocuments().get(0).toObject(ShopifyProductMapping.class);
+            }
+        } catch (Exception e) {
+            log.warn("[ShopifyProductMappingRepo] Error finding mapping by shopifyProductId {}: {}", shopifyProductId, e.getMessage());
+        }
+        return null;
     }
 }

@@ -4,7 +4,7 @@ public class CreateShopifyConnectionRequest {
 
     private String shopifyStoreDomain;
     private String shopifyStoreId;
-
+    private String accessToken;
 
     public CreateShopifyConnectionRequest() {
     }
@@ -34,5 +34,11 @@ public class CreateShopifyConnectionRequest {
         this.shopifyStoreId = shopifyStoreId;
     }
 
+    public String getAccessToken() {
+        return accessToken;
+    }
 
+    public void setAccessToken(String accessToken) {
+        this.accessToken = accessToken;
+    }
 }

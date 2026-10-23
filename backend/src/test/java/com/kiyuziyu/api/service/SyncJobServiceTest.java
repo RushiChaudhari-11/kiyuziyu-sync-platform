@@ -312,15 +312,16 @@ class SyncJobServiceTest {
                 SyncJobType.PRODUCT_SYNC.name(), SyncJobStatus.QUEUED.name(), Collections.singletonList("prod_705"),
                 1, 0, 0, 0, null, null, null, "2026-09-23T00:00:00Z", "2026-09-23T00:00:00Z");
 
+        job.setStartedAt("2026-09-23T00:00:00Z");
         when(syncJobRepository.findById("job_async_1")).thenReturn(job);
+        when(syncJobRepository.claimJobForProcessing("job_async_1")).thenReturn(job);
 
         Map<String, Object> syncData = new HashMap<>();
         syncData.put("shopifyProductId", "gid://shopify/Product/12345");
         ShopifyProductSyncResponse syncResp = new ShopifyProductSyncResponse(true, "Synced", false, syncData);
-        when(shopifyProductService.syncProduct(eq("tenant_da7590066509"), any(Product.class))).thenReturn(syncResp);
+        when(shopifyProductService.syncProduct(eq("tenant_da7590066509"), any(Product.class), any())).thenReturn(syncResp);
 
-        testSyncJobProcessor.processJobAsync("job_async_1", "tenant_da7590066509", "store_5fcd29b2b01c", "sc_141e517b19ea",
-                Collections.singletonList("prod_705")).get();
+        testSyncJobProcessor.processJobAsync(job).get();
 
         assertEquals(SyncJobStatus.COMPLETED.name(), job.getStatus());
         assertEquals(1, job.getTotalItems());
@@ -331,7 +332,7 @@ class SyncJobServiceTest {
         assertNotNull(job.getCompletedAt());
         assertNull(job.getErrorMessage());
 
-        verify(shopifyProductService).syncProduct(eq("tenant_da7590066509"), any(Product.class));
+        verify(shopifyProductService).syncProduct(eq("tenant_da7590066509"), any(Product.class), any());
     }
 
     @Test
@@ -349,15 +350,15 @@ class SyncJobServiceTest {
                 2, 0, 0, 0, null, null, null, "2026-09-23T00:00:00Z", "2026-09-23T00:00:00Z");
 
         when(syncJobRepository.findById("job_async_partial")).thenReturn(job);
+        when(syncJobRepository.claimJobForProcessing("job_async_partial")).thenReturn(job);
 
         ShopifyProductSyncResponse successResp = new ShopifyProductSyncResponse(true, "Synced", false, new HashMap<>());
         ShopifyProductSyncResponse failResp = new ShopifyProductSyncResponse(false, "Shopify rate limit exceeded", false, null);
 
-        when(shopifyProductService.syncProduct(eq("tenant_da7590066509"), argThat(p -> p != null && "prod_705".equals(p.getId())))).thenReturn(successResp);
-        when(shopifyProductService.syncProduct(eq("tenant_da7590066509"), argThat(p -> p != null && "prod_failed".equals(p.getId())))).thenReturn(failResp);
+        when(shopifyProductService.syncProduct(eq("tenant_da7590066509"), argThat(p -> p != null && "prod_705".equals(p.getId())), any())).thenReturn(successResp);
+        when(shopifyProductService.syncProduct(eq("tenant_da7590066509"), argThat(p -> p != null && "prod_failed".equals(p.getId())), any())).thenReturn(failResp);
 
-        testSyncJobProcessor.processJobAsync("job_async_partial", "tenant_da7590066509", "store_5fcd29b2b01c", "sc_141e517b19ea",
-                Arrays.asList("prod_705", "prod_failed")).get();
+        testSyncJobProcessor.processJobAsync(job).get();
 
         assertEquals(SyncJobStatus.PARTIAL.name(), job.getStatus());
         assertEquals(2, job.getTotalItems());
@@ -374,12 +375,12 @@ class SyncJobServiceTest {
                 1, 0, 0, 0, null, null, null, "2026-09-23T00:00:00Z", "2026-09-23T00:00:00Z");
 
         when(syncJobRepository.findById("job_async_fail")).thenReturn(job);
+        when(syncJobRepository.claimJobForProcessing("job_async_fail")).thenReturn(job);
 
         ShopifyProductSyncResponse failResp = new ShopifyProductSyncResponse(false, "GraphQL connection timeout", false, null);
-        when(shopifyProductService.syncProduct(eq("tenant_da7590066509"), any(Product.class))).thenReturn(failResp);
+        when(shopifyProductService.syncProduct(eq("tenant_da7590066509"), any(Product.class), any())).thenReturn(failResp);
 
-        testSyncJobProcessor.processJobAsync("job_async_fail", "tenant_da7590066509", "store_5fcd29b2b01c", "sc_141e517b19ea",
-                Collections.singletonList("prod_705")).get();
+        testSyncJobProcessor.processJobAsync(job).get();
 
         assertEquals(SyncJobStatus.FAILED.name(), job.getStatus());
         assertEquals(1, job.getProcessedItems());
@@ -396,5 +397,15 @@ class SyncJobServiceTest {
         assertFalse(sanitized.contains("shpat_1234567890abcdef"));
         assertFalse(sanitized.contains("xyz123"));
         assertTrue(sanitized.contains("[REDACTED]"));
+    }
+
+    @Test
+    void asyncProcessor_nullJob_skipsGracefullyWithoutExecutingSync() throws Exception {
+        // When processJobAsync receives null (safety guard)
+        testSyncJobProcessor.processJobAsync(null).get();
+
+        // Must not call syncProduct or save anything
+        verify(shopifyProductService, never()).syncProduct(any(), any(), any());
+        verify(syncJobRepository, never()).save(any());
     }
 }
