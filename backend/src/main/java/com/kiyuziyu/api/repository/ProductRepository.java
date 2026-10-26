@@ -45,43 +45,136 @@ public class ProductRepository {
         }
     }
 
-    public Product findById(String productCode) throws ExecutionException, InterruptedException {
-        long t0 = System.currentTimeMillis();
-        try {
-            // Fast path: single collectionGroup query (requires Firestore index on products.productCode)
-            Query query = firestore.collectionGroup("products").whereEqualTo("productCode", productCode).limit(1);
-            List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
-            log.info("[ProductRepo] findById('{}') collectionGroup query {}ms {} docs", productCode, System.currentTimeMillis()-t0, docs.size());
-            if (docs.isEmpty()) return null;
-            Map<String, DocumentSnapshot> cache = new HashMap<>();
-            return mapToProduct(docs.get(0), cache);
-        } catch (Exception e) {
-            if (isIndexMissingError(e)) {
-                log.warn("[ProductRepo] findById('{}') collectionGroup index not ready, falling back to iteration ({}ms so far). Deploy firestore.indexes.json to fix.", productCode, System.currentTimeMillis()-t0);
-                return findByIdFallback(productCode);
+    private final List<DocumentReference> cachedSubcollections = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private volatile long lastSubcollectionCacheTime = 0;
+
+    private List<DocumentReference> getAllSubcollections() {
+        long now = System.currentTimeMillis();
+        if (!cachedSubcollections.isEmpty() && (now - lastSubcollectionCacheTime < 300_000)) {
+            return cachedSubcollections;
+        }
+        synchronized (cachedSubcollections) {
+            if (!cachedSubcollections.isEmpty() && (now - lastSubcollectionCacheTime < 300_000)) {
+                return cachedSubcollections;
             }
-            throw e;
+            List<DocumentReference> list = new ArrayList<>();
+            try {
+                Iterable<DocumentReference> collections = firestore.collection("collections").listDocuments();
+                for (DocumentReference colRef : collections) {
+                    Iterable<DocumentReference> subcollections = colRef.collection("subcollections").listDocuments();
+                    for (DocumentReference subRef : subcollections) {
+                        list.add(subRef);
+                    }
+                }
+                cachedSubcollections.clear();
+                cachedSubcollections.addAll(list);
+                lastSubcollectionCacheTime = now;
+            } catch (Exception e) {
+                log.warn("[ProductRepo] Error listing subcollections: {}", e.getMessage());
+            }
+            return list;
         }
     }
 
-    /** Iteration-based fallback used until the collectionGroup index is built. */
+    public Product findById(String productCode) throws ExecutionException, InterruptedException {
+        if (productCode == null || productCode.trim().isEmpty()) return null;
+        long t0 = System.currentTimeMillis();
+        String clean = productCode.trim();
+
+        // 0. Cache check
+        Product cached = productDocCache.get(clean);
+        if (cached == null) cached = productDocCache.get(clean.toLowerCase());
+        if (cached == null) cached = productDocCache.get(com.kiyuziyu.api.util.ShopifySkuParser.normalize(clean).toLowerCase());
+        if (cached != null) return cached;
+
+        // If productCode has a variant suffix, also check base code in cache
+        com.kiyuziyu.api.util.ShopifySkuParser.SkuParseResult parsedSku = com.kiyuziyu.api.util.ShopifySkuParser.parse(clean);
+        if (parsedSku.hasVariantSuffix() && !parsedSku.getBaseProductCode().isEmpty()) {
+            String base = parsedSku.getBaseProductCode();
+            cached = productDocCache.get(base);
+            if (cached == null) cached = productDocCache.get(base.toLowerCase());
+            if (cached == null) cached = productDocCache.get(com.kiyuziyu.api.util.ShopifySkuParser.normalize(base).toLowerCase());
+            if (cached != null) return cached;
+            clean = base;
+        }
+
+        try {
+            // Fast path: try exact, single space, and double space variants via collectionGroup
+            Query query = firestore.collectionGroup("products").whereEqualTo("productCode", clean).limit(1);
+            List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
+            if (docs.isEmpty()) {
+                query = firestore.collectionGroup("products").whereEqualTo("productCode", clean + " ").limit(1);
+                docs = query.get().get().getDocuments();
+            }
+            if (docs.isEmpty()) {
+                query = firestore.collectionGroup("products").whereEqualTo("productCode", clean + "  ").limit(1);
+                docs = query.get().get().getDocuments();
+            }
+            if (!docs.isEmpty()) {
+                log.info("[ProductRepo] findById('{}') collectionGroup query {}ms 1 doc", productCode, System.currentTimeMillis()-t0);
+                Map<String, DocumentSnapshot> cache = new HashMap<>();
+                Product p = mapToProduct(docs.get(0), cache);
+                cacheProduct(p);
+                return p;
+            }
+        } catch (Exception e) {
+            if (isIndexMissingError(e)) {
+                log.warn("[ProductRepo] findById('{}') collectionGroup index not ready, falling back to parallel subcollection search: {}", productCode, e.getMessage());
+                Product p = findByIdFallback(clean);
+                if (p != null) cacheProduct(p);
+                return p;
+            }
+            throw e;
+        }
+        Product p = findByIdFallback(clean);
+        if (p != null) cacheProduct(p);
+        return p;
+    }
+
+    /** Iteration-based parallel fallback across subcollections. */
     private Product findByIdFallback(String productCode) throws ExecutionException, InterruptedException {
+        if (productCode == null || productCode.trim().isEmpty()) return null;
         long t0 = System.currentTimeMillis();
         Map<String, DocumentSnapshot> cache = new HashMap<>();
-        Iterable<DocumentReference> collections = firestore.collection("collections").listDocuments();
-        for (DocumentReference colRef : collections) {
-            Iterable<DocumentReference> subcollections = colRef.collection("subcollections").listDocuments();
-            for (DocumentReference subRef : subcollections) {
-                Query q = subRef.collection("products").whereEqualTo("productCode", productCode).limit(1);
-                List<QueryDocumentSnapshot> docs = q.get().get().getDocuments();
-                if (!docs.isEmpty()) {
-                    log.info("[ProductRepo] findByIdFallback('{}') found via iteration {}ms", productCode, System.currentTimeMillis()-t0);
-                    return mapToProduct(docs.get(0), cache);
-                }
-            }
+        String cleanCode = productCode.trim();
+
+        List<DocumentReference> subcollections = getAllSubcollections();
+        List<ApiFuture<QuerySnapshot>> futures = new ArrayList<>();
+        for (DocumentReference subRef : subcollections) {
+            futures.add(subRef.collection("products").whereEqualTo("productCode", cleanCode).limit(1).get());
+            futures.add(subRef.collection("products").whereEqualTo("productCode", cleanCode + " ").limit(1).get());
+            futures.add(subRef.collection("products").whereEqualTo("productCode", cleanCode + "  ").limit(1).get());
         }
-        log.info("[ProductRepo] findByIdFallback('{}') not found {}ms", productCode, System.currentTimeMillis()-t0);
+
+        for (ApiFuture<QuerySnapshot> future : futures) {
+            try {
+                QuerySnapshot snap = future.get();
+                if (!snap.isEmpty()) {
+                    QueryDocumentSnapshot doc = snap.getDocuments().get(0);
+                    log.info("[ProductRepo] findByIdFallback('{}') found in {}ms at {}", productCode, System.currentTimeMillis() - t0, doc.getReference().getPath());
+                    Product p = mapToProduct(doc, cache);
+                    cacheProduct(p);
+                    return p;
+                }
+            } catch (Exception ignored) {}
+        }
+        log.info("[ProductRepo] findByIdFallback('{}') not found {}ms", productCode, System.currentTimeMillis() - t0);
         return null;
+    }
+
+    private final Map<String, Product> productDocCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public void cacheProduct(Product p) {
+        if (p == null) return;
+        if (p.getId() != null) {
+            productDocCache.put(p.getId().trim(), p);
+        }
+        if (p.getProductCode() != null) {
+            String code = p.getProductCode().trim();
+            productDocCache.put(code, p);
+            productDocCache.put(code.toLowerCase(), p);
+            productDocCache.put(com.kiyuziyu.api.util.ShopifySkuParser.normalize(code).toLowerCase(), p);
+        }
     }
 
     /** Find a master product by its unique Firestore document ID (productId). */
@@ -89,12 +182,17 @@ public class ProductRepository {
         if (firestore == null || productId == null || productId.trim().isEmpty()) {
             return null;
         }
+        String pId = productId.trim();
+        Product cached = productDocCache.get(pId);
+        if (cached != null) {
+            return cached;
+        }
         long t0 = System.currentTimeMillis();
         Map<String, DocumentSnapshot> cache = new HashMap<>();
 
         // Fast path: check root collection "products" if exists
         try {
-            DocumentSnapshot rootDoc = firestore.collection("products").document(productId.trim()).get().get();
+            DocumentSnapshot rootDoc = firestore.collection("products").document(pId).get().get();
             if (rootDoc.exists()) {
                 Product p = rootDoc.toObject(Product.class);
                 if (p != null) {
@@ -107,13 +205,17 @@ public class ProductRepository {
             }
         } catch (Exception ignored) {}
 
-        Iterable<DocumentReference> collections = firestore.collection("collections").listDocuments();
-        for (DocumentReference colRef : collections) {
-            Iterable<DocumentReference> subcollections = colRef.collection("subcollections").listDocuments();
-            for (DocumentReference subRef : subcollections) {
-                DocumentSnapshot doc = subRef.collection("products").document(productId.trim()).get().get();
+        List<DocumentReference> subcollections = getAllSubcollections();
+        List<ApiFuture<DocumentSnapshot>> futures = new ArrayList<>(subcollections.size());
+        for (DocumentReference subRef : subcollections) {
+            futures.add(subRef.collection("products").document(pId).get());
+        }
+
+        for (ApiFuture<DocumentSnapshot> future : futures) {
+            try {
+                DocumentSnapshot doc = future.get();
                 if (doc.exists()) {
-                    log.info("[ProductRepo] findByDocumentId('{}') found via iteration in {}ms", productId, System.currentTimeMillis() - t0);
+                    log.info("[ProductRepo] findByDocumentId('{}') found in {}ms at {}", pId, System.currentTimeMillis() - t0, doc.getReference().getPath());
                     Product p = doc.toObject(Product.class);
                     if (p != null) {
                         p.setId(doc.getId());
@@ -126,12 +228,13 @@ public class ProductRepository {
                             p.setSubcollectionId(parts[3]);
                             enrichWithParentData(p, parts[1], parts[3], cache);
                         }
+                        productDocCache.put(pId, p);
                     }
                     return p;
                 }
-            }
+            } catch (Exception ignored) {}
         }
-        log.info("[ProductRepo] findByDocumentId('{}') not found after {}ms", productId, System.currentTimeMillis() - t0);
+        log.info("[ProductRepo] findByDocumentId('{}') not found after {}ms", pId, System.currentTimeMillis() - t0);
         return null;
     }
 

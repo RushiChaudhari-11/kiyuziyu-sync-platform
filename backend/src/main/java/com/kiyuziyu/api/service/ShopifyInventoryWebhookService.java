@@ -120,14 +120,21 @@ public class ShopifyInventoryWebhookService {
                 return false;
             }
 
-            String productCode = sku.contains("-") ? sku.split("-")[0].trim() : sku.trim();
-            log.info("[ShopifyInventoryWebhook] Resolved SKU='{}' -> productCode='{}' for inventoryItemId={}", sku, productCode, inventoryItemId);
+            com.kiyuziyu.api.util.ShopifySkuParser.SkuParseResult parsedSku = com.kiyuziyu.api.util.ShopifySkuParser.parse(sku);
+            String productCode = parsedSku.getBaseProductCode();
+            int variantIdx = parsedSku.getVariantIndex();
+            log.info("[ShopifyInventoryWebhook] Resolved SKU='{}' -> baseProductCode='{}', variantIdx={} for inventoryItemId={}",
+                    sku, productCode, variantIdx, inventoryItemId);
 
             // Step 3: Query matching master products in Firestore
             List<QueryDocumentSnapshot> matchingDocs = new ArrayList<>();
             try {
                 Query query = firestore.collectionGroup("products").whereEqualTo("productCode", productCode);
                 matchingDocs = query.get().get().getDocuments();
+                if (matchingDocs.isEmpty()) {
+                    query = firestore.collectionGroup("products").whereEqualTo("productCode", productCode + " ");
+                    matchingDocs = query.get().get().getDocuments();
+                }
             } catch (Exception cgEx) {
                 log.warn("[ShopifyInventoryWebhook] collectionGroup query failed for {}: {}. Trying iteration fallback...", productCode, cgEx.getMessage());
             }
@@ -140,6 +147,10 @@ public class ShopifyInventoryWebhookService {
                     for (com.google.cloud.firestore.DocumentReference subRef : subcollections) {
                         Query q = subRef.collection("products").whereEqualTo("productCode", productCode);
                         List<QueryDocumentSnapshot> docs = q.get().get().getDocuments();
+                        if (docs.isEmpty()) {
+                            q = subRef.collection("products").whereEqualTo("productCode", productCode + " ");
+                            docs = q.get().get().getDocuments();
+                        }
                         if (!docs.isEmpty()) {
                             matchingDocs.addAll(docs);
                         }
@@ -161,15 +172,10 @@ public class ShopifyInventoryWebhookService {
 
                 Map<String, Object> updates = new HashMap<>();
 
-                if (sku.contains("-")) {
-                    int variantIdx = -1;
-                    try {
-                        variantIdx = Integer.parseInt(sku.split("-")[1].trim()) - 1;
-                    } catch (Exception ignored) {}
-
+                if (variantIdx >= 0) {
                     @SuppressWarnings("unchecked")
                     List<Map<String, Object>> variations = (List<Map<String, Object>>) doc.get("variations");
-                    if (variations != null && variantIdx >= 0 && variantIdx < variations.size()) {
+                    if (variations != null && variantIdx < variations.size()) {
                         List<Map<String, Object>> mutableVariations = new ArrayList<>();
                         int totalStock = 0;
                         for (int i = 0; i < variations.size(); i++) {

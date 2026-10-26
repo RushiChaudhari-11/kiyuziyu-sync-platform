@@ -33,6 +33,12 @@ public class ShopifyOrderWebhookService {
     @Autowired
     private com.kiyuziyu.api.repository.ShopifyConnectionRepository shopifyConnectionRepository;
 
+    @Autowired(required = false)
+    private com.kiyuziyu.api.repository.ShopifyProductMappingRepository shopifyProductMappingRepository;
+
+    @Autowired(required = false)
+    private com.kiyuziyu.api.integration.shopify.ShopifyGraphQLClient shopifyGraphQLClient;
+
     @Autowired
     private Firestore firestore;
 
@@ -47,13 +53,15 @@ public class ShopifyOrderWebhookService {
             
             String resolvedTenantId = tenantId;
             String resolvedStoreId = null;
+            com.kiyuziyu.api.model.ShopifyConnection conn = null;
             if (shopDomain != null && !shopDomain.trim().isEmpty()) {
-                com.kiyuziyu.api.model.ShopifyConnection conn = shopifyConnectionRepository.findByShopifyStoreDomain(shopDomain.trim());
+                conn = shopifyConnectionRepository.findByShopifyStoreDomain(shopDomain.trim());
                 if (conn != null) {
                     if (resolvedTenantId == null || resolvedTenantId.trim().isEmpty()) {
                         resolvedTenantId = conn.getTenantId();
                     }
                     resolvedStoreId = conn.getStoreId();
+                    com.kiyuziyu.api.integration.shopify.ShopifyContextHolder.setContext(shopDomain.trim());
                 }
             }
             if (resolvedTenantId == null || resolvedTenantId.trim().isEmpty()) {
@@ -62,6 +70,12 @@ public class ShopifyOrderWebhookService {
             
             ExtractedOrderDetails details = extractOrderDetails(payload);
 
+            List<Map<String, Object>> lineItems = (List<Map<String, Object>>) payload.get("line_items");
+            if (lineItems == null || lineItems.isEmpty()) {
+                log.info("[ShopifyOrderWebhook] No line items in order.");
+                return;
+            }
+
             // Check if order already exists in Firestore
             com.google.cloud.firestore.QuerySnapshot existingSnap = firestore.collection(TenantOrderRepository.COLLECTION_NAME)
                     .whereEqualTo("shopifyOrderId", shopifyOrderId)
@@ -69,32 +83,56 @@ public class ShopifyOrderWebhookService {
                     .get()
                     .get();
 
+            boolean isRepairingExisting = false;
+            com.google.cloud.firestore.DocumentSnapshot existingDoc = null;
+            List<Map<String, Object>> alreadyStoredItems = null;
+
             if (!existingSnap.isEmpty()) {
-                com.google.cloud.firestore.DocumentSnapshot doc = existingSnap.getDocuments().get(0);
-                log.info("[ShopifyOrderWebhook] Order #{} (shopifyOrderId={}) already exists. Updating customer/order fields without re-deducting inventory...", orderNumber, shopifyOrderId);
-                
-                Map<String, Object> updates = new java.util.HashMap<>();
-                if (isMeaningful(details.customerName)) updates.put("customerName", details.customerName);
-                if (isMeaningful(details.customerEmail)) updates.put("customerEmail", details.customerEmail);
-                if (isMeaningful(details.customerPhone)) updates.put("customerPhone", details.customerPhone);
-                if (isMeaningful(details.shippingAddressStr)) updates.put("shippingAddress", details.shippingAddressStr);
-                if (isMeaningful(details.billingAddressStr)) updates.put("billingAddress", details.billingAddressStr);
-                if (isMeaningful(details.currency)) updates.put("currency", details.currency);
-                if (isMeaningful(details.paymentMethod)) updates.put("paymentMethod", details.paymentMethod);
-                if (isMeaningful(details.shippingMethod)) updates.put("shippingMethod", details.shippingMethod);
-                if (isMeaningful(details.customerNote)) updates.put("customerNote", details.customerNote);
+                existingDoc = existingSnap.getDocuments().get(0);
+                boolean hasItemsField = false;
+                try {
+                    hasItemsField = existingDoc.contains("items");
+                } catch (Exception ignored) {}
 
-                String financialStatus = payload.get("financial_status") != null ? String.valueOf(payload.get("financial_status")) : "";
-                if ("paid".equalsIgnoreCase(financialStatus)) {
-                    updates.put("status", "Payment Done");
+                int storedCount = 0;
+                if (hasItemsField) {
+                    Object rawExistingItems = existingDoc.get("items");
+                    if (rawExistingItems instanceof List) {
+                        alreadyStoredItems = (List<Map<String, Object>>) rawExistingItems;
+                        storedCount = alreadyStoredItems.size();
+                    }
                 }
 
-                if (!updates.isEmpty()) {
-                    updates.put("updatedAt", Instant.now().toString());
-                    doc.getReference().update(updates).get();
-                    log.info("[ShopifyOrderWebhook] Successfully updated customer details on existing doc: {}", doc.getId());
+                if (!hasItemsField || storedCount >= lineItems.size()) {
+                    log.info("[ShopifyOrderWebhook] Order #{} (shopifyOrderId={}) already exists with complete items ({}). Updating customer/order fields...",
+                            orderNumber, shopifyOrderId, storedCount);
+                    Map<String, Object> updates = new java.util.HashMap<>();
+                    if (isMeaningful(details.customerName)) updates.put("customerName", details.customerName);
+                    if (isMeaningful(details.customerEmail)) updates.put("customerEmail", details.customerEmail);
+                    if (isMeaningful(details.customerPhone)) updates.put("customerPhone", details.customerPhone);
+                    if (isMeaningful(details.shippingAddressStr)) updates.put("shippingAddress", details.shippingAddressStr);
+                    if (isMeaningful(details.billingAddressStr)) updates.put("billingAddress", details.billingAddressStr);
+                    if (isMeaningful(details.currency)) updates.put("currency", details.currency);
+                    if (isMeaningful(details.paymentMethod)) updates.put("paymentMethod", details.paymentMethod);
+                    if (isMeaningful(details.shippingMethod)) updates.put("shippingMethod", details.shippingMethod);
+                    if (isMeaningful(details.customerNote)) updates.put("customerNote", details.customerNote);
+
+                    String financialStatus = payload.get("financial_status") != null ? String.valueOf(payload.get("financial_status")) : "";
+                    if ("paid".equalsIgnoreCase(financialStatus)) {
+                        updates.put("status", "Payment Done");
+                    }
+
+                    if (!updates.isEmpty()) {
+                        updates.put("updatedAt", Instant.now().toString());
+                        existingDoc.getReference().update(updates).get();
+                        log.info("[ShopifyOrderWebhook] Successfully updated customer details on existing doc: {}", existingDoc.getId());
+                    }
+                    return;
                 }
-                return;
+
+                log.warn("[ShopifyOrderWebhook] Order #{} (shopifyOrderId={}) exists but only has {} items, while incoming Shopify order has {} items. Repairing order and deducting missing inventory...",
+                        orderNumber, shopifyOrderId, storedCount, lineItems.size());
+                isRepairingExisting = true;
             }
             
             if (!tenantOrderRepository.acquireLock(resolvedTenantId, shopifyOrderId)) {
@@ -102,9 +140,9 @@ public class ShopifyOrderWebhookService {
                 return;
             }
             
-            String internalOrderId = "order_" + resolvedTenantId + "_" + shopifyOrderId;
+            String internalOrderId = isRepairingExisting && existingDoc != null ? existingDoc.getId() : ("order_" + resolvedTenantId + "_" + shopifyOrderId);
             
-            log.info("[ShopifyOrderWebhook] Processing new order #{} for tenant {}", orderNumber, resolvedTenantId);
+            log.info("[ShopifyOrderWebhook] Processing order #{} for tenant {} (isRepairing={})", orderNumber, resolvedTenantId, isRepairingExisting);
 
             String customerName = details.customerName;
             String customerEmail = details.customerEmail;
@@ -115,12 +153,6 @@ public class ShopifyOrderWebhookService {
             String paymentMethodStr = details.paymentMethod;
             String shippingMethodStr = details.shippingMethod;
 
-            List<Map<String, Object>> lineItems = (List<Map<String, Object>>) payload.get("line_items");
-            if (lineItems == null || lineItems.isEmpty()) {
-                log.info("[ShopifyOrderWebhook] No line items in order.");
-                return;
-            }
-
             List<TenantOrderItem> kiyuziyuItems = new ArrayList<>();
             double totalBase = 0.0;
             double totalSelling = 0.0;
@@ -129,134 +161,391 @@ public class ShopifyOrderWebhookService {
 
             Map<String, Product> productCache = new java.util.HashMap<>();
             Map<String, Boolean> productUpdated = new java.util.HashMap<>();
-            boolean hasInvalidVariantSku = false;
             boolean hasInvalidQuantity = false;
+            boolean hasInvalidVariantSku = false;
+            int recognizedCount = 0;
 
             // Phase 1: Validate all recognized line items first without mutating inventory
             List<ValidatedLineItem> validatedItems = new java.util.ArrayList<>();
 
             for (Map<String, Object> item : lineItems) {
-                String sku = (String) item.get("sku");
-                if (sku == null || sku.trim().isEmpty()) {
-                    continue; // Skip non-Kiyuziyu items (No SKU)
+                String sku = item.get("sku") != null ? String.valueOf(item.get("sku")).trim() : "";
+                String shopifyProductId = item.get("product_id") != null ? String.valueOf(item.get("product_id")).trim() : "";
+                if (shopifyProductId.contains("/")) {
+                    shopifyProductId = shopifyProductId.substring(shopifyProductId.lastIndexOf('/') + 1);
                 }
+                String shopifyVariantId = item.get("variant_id") != null ? String.valueOf(item.get("variant_id")).trim() : "";
+                if (shopifyVariantId.contains("/")) {
+                    shopifyVariantId = shopifyVariantId.substring(shopifyVariantId.lastIndexOf('/') + 1);
+                }
+                String itemTitle = item.get("title") != null ? String.valueOf(item.get("title")).trim() : "";
+                String variantTitle = item.get("variant_title") != null ? String.valueOf(item.get("variant_title")).trim() : "";
 
-                String skuClean = sku.trim();
                 Product kiyuziyuProduct = null;
                 String productCode = null;
-                int matchedVariantIdx = -1;
 
-                // 1. Direct check: exact SKU matches productCode
-                Product directProduct = productCache.get(skuClean);
-                if (directProduct == null) {
+                // 1. Try resolving via ShopifyProductMapping using shopifyProductId
+                if (shopifyProductMappingRepository != null && !shopifyProductId.isEmpty()) {
                     try {
-                        directProduct = productRepository.findById(skuClean);
-                    } catch (Exception ignored) {}
-                }
-                if (directProduct != null) {
-                    List<Map<String, Object>> vars = directProduct.getVariations();
-                    if (vars == null || vars.isEmpty()) {
-                        kiyuziyuProduct = directProduct;
-                        productCode = skuClean;
-                        matchedVariantIdx = -1;
-                    } else if (vars.size() == 1) {
-                        kiyuziyuProduct = directProduct;
-                        productCode = skuClean;
-                        matchedVariantIdx = 0;
-                    } else {
-                        // Multi-variant product was referenced by bare productCode without variant index
-                        log.warn("[ShopifyOrderWebhook] SKU '{}' matches multi-variant product '{}' (variations={}) but is missing variant index.",
-                                skuClean, skuClean, vars.size());
-                        hasInvalidVariantSku = true;
-                        break;
-                    }
-                }
-
-                // 2. Multi-variant convention check: <productCode>-<1-based idx>
-                if (kiyuziyuProduct == null && skuClean.contains("-")) {
-                    int lastDash = skuClean.lastIndexOf('-');
-                    String candidateCode = skuClean.substring(0, lastDash).trim();
-                    String suffix = skuClean.substring(lastDash + 1).trim();
-
-                    Product candidateProduct = productCache.get(candidateCode);
-                    if (candidateProduct == null) {
-                        try {
-                            candidateProduct = productRepository.findById(candidateCode);
-                        } catch (Exception ignored) {}
-                    }
-
-                    if (candidateProduct != null) {
-                        List<Map<String, Object>> vars = candidateProduct.getVariations();
-                        if (vars != null && !vars.isEmpty()) {
-                            try {
-                                int idx = Integer.parseInt(suffix);
-                                if (idx >= 1 && idx <= vars.size()) {
-                                    kiyuziyuProduct = candidateProduct;
-                                    productCode = candidateCode;
-                                    matchedVariantIdx = idx - 1;
-                                } else {
-                                    // Variant index is out of range
-                                    log.warn("[ShopifyOrderWebhook] SKU '{}' has out-of-range variant index {} for product '{}' (total variations={}).",
-                                            skuClean, idx, candidateCode, vars.size());
-                                    hasInvalidVariantSku = true;
-                                    break;
-                                }
-                            } catch (NumberFormatException e) {
-                                // Malformed variant index
-                                log.warn("[ShopifyOrderWebhook] SKU '{}' has malformed variant index '{}' for multi-variant product '{}'.",
-                                        skuClean, suffix, candidateCode);
-                                    hasInvalidVariantSku = true;
-                                    break;
+                        com.kiyuziyu.api.model.ShopifyProductMapping mapping = shopifyProductMappingRepository.findByShopifyProductId(shopifyProductId);
+                        if (mapping == null) {
+                            mapping = shopifyProductMappingRepository.findByShopifyProductId("gid://shopify/Product/" + shopifyProductId);
+                        }
+                        if (mapping == null && resolvedTenantId != null && resolvedStoreId != null) {
+                            mapping = shopifyProductMappingRepository.findByStoreAndShopifyProductId(resolvedTenantId, resolvedStoreId, shopifyProductId);
+                            if (mapping == null) {
+                                mapping = shopifyProductMappingRepository.findByStoreAndShopifyProductId(resolvedTenantId, resolvedStoreId, "gid://shopify/Product/" + shopifyProductId);
                             }
+                        }
+                        if (mapping != null && mapping.getProductId() != null) {
+                            String mDocId = mapping.getProductId().trim();
+                            kiyuziyuProduct = productCache.get(mDocId);
+                            if (kiyuziyuProduct == null) {
+                                kiyuziyuProduct = productRepository.findByDocumentId(mDocId);
+                            }
+                            if (kiyuziyuProduct == null) {
+                                kiyuziyuProduct = productRepository.findById(mDocId);
+                            }
+                            if (kiyuziyuProduct != null) {
+                                productCode = kiyuziyuProduct.getProductCode();
+                            }
+                        }
+                    } catch (Exception ex) {
+                        log.debug("[ShopifyOrderWebhook] Mapping lookup by shopifyProductId {} failed: {}", shopifyProductId, ex.getMessage());
+                    }
+                }
+
+                // 1B. Try resolving directly from Shopify GraphQL via metafield / tags if mapping not found
+                if (kiyuziyuProduct == null && shopifyGraphQLClient != null && !shopifyProductId.isEmpty()) {
+                    try {
+                        Map<String, String> sMeta = shopifyGraphQLClient.getFirebaseProductDetailsFromShopify(shopifyProductId);
+                        if (sMeta != null) {
+                            String sDocId = sMeta.get("productId");
+                            String sCode = sMeta.get("productCode");
+                            if (sDocId != null && !sDocId.isEmpty()) {
+                                kiyuziyuProduct = productCache.get(sDocId);
+                                if (kiyuziyuProduct == null) {
+                                    kiyuziyuProduct = productRepository.findByDocumentId(sDocId);
+                                }
+                                if (kiyuziyuProduct == null) {
+                                    kiyuziyuProduct = productRepository.findById(sDocId);
+                                }
+                            }
+                            if (kiyuziyuProduct == null && sCode != null && !sCode.isEmpty()) {
+                                kiyuziyuProduct = productCache.get(sCode);
+                                if (kiyuziyuProduct == null) {
+                                    kiyuziyuProduct = productRepository.findById(sCode);
+                                }
+                            }
+                            if (kiyuziyuProduct != null) {
+                                productCode = sCode != null ? sCode : kiyuziyuProduct.getProductCode();
+                                // Cache and save mapping for future fast path
+                                if (shopifyProductMappingRepository != null && resolvedTenantId != null && resolvedStoreId != null) {
+                                    try {
+                                        com.kiyuziyu.api.model.ShopifyProductMapping m = new com.kiyuziyu.api.model.ShopifyProductMapping(
+                                                "map_" + resolvedStoreId + "_" + shopifyProductId,
+                                                resolvedTenantId,
+                                                resolvedStoreId,
+                                                conn != null ? conn.getConnectionId() : "conn_" + resolvedStoreId,
+                                                kiyuziyuProduct.getId(),
+                                                productCode,
+                                                "gid://shopify/Product/" + shopifyProductId,
+                                                null,
+                                                "MAPPED",
+                                                Instant.now().toString(),
+                                                Instant.now().toString()
+                                        );
+                                        shopifyProductMappingRepository.save(m);
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+                        }
+                    } catch (Exception ex) {
+                        log.debug("[ShopifyOrderWebhook] Shopify GraphQL product metadata lookup failed for {}: {}", shopifyProductId, ex.getMessage());
+                    }
+                }
+
+                // 2. Try resolving via candidate codes from SKU (checking mappings and master products)
+                if (kiyuziyuProduct == null && !sku.isEmpty()) {
+                    List<String> candidates = new ArrayList<>();
+                    candidates.add(sku.trim());
+                    com.kiyuziyu.api.util.ShopifySkuParser.SkuParseResult parsedSku = com.kiyuziyu.api.util.ShopifySkuParser.parse(sku);
+                    if (parsedSku.hasVariantSuffix() && !parsedSku.getBaseProductCode().isEmpty()) {
+                        candidates.add(parsedSku.getBaseProductCode());
+                        String normBase = com.kiyuziyu.api.util.ShopifySkuParser.normalize(parsedSku.getBaseProductCode());
+                        if (!candidates.contains(normBase)) candidates.add(normBase);
+                    }
+
+                    for (String candidate : candidates) {
+                        // 2A. Fast mapping check by candidate code or SKU
+                        if (shopifyProductMappingRepository != null) {
+                            try {
+                                com.kiyuziyu.api.model.ShopifyProductMapping m = shopifyProductMappingRepository.findBySkuOrProductCode(candidate);
+                                if (m != null && m.getProductId() != null) {
+                                    String mDocId = m.getProductId().trim();
+                                    kiyuziyuProduct = productCache.get(mDocId);
+                                    if (kiyuziyuProduct == null) {
+                                        kiyuziyuProduct = productRepository.findByDocumentId(mDocId);
+                                    }
+                                    if (kiyuziyuProduct != null) {
+                                        productCode = kiyuziyuProduct.getProductCode() != null ? kiyuziyuProduct.getProductCode() : m.getProductCode();
+                                        break;
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                        }
+
+                        // 2B. Direct product cache / repo check
+                        kiyuziyuProduct = productCache.get(candidate);
+                        if (kiyuziyuProduct == null) {
+                            try { kiyuziyuProduct = productRepository.findByDocumentId(candidate); } catch (Exception ignored) {}
+                        }
+                        if (kiyuziyuProduct == null) {
+                            try { kiyuziyuProduct = productRepository.findById(candidate); } catch (Exception ignored) {}
+                        }
+                        if (kiyuziyuProduct != null) {
+                            productCode = kiyuziyuProduct.getProductCode() != null ? kiyuziyuProduct.getProductCode() : candidate;
+                            break;
                         }
                     }
                 }
 
-                // If kiyuziyuProduct is still null, it is an unknown SKU (e.g. unknown product or non-matching prefix)
-                if (kiyuziyuProduct == null) {
-                    log.warn("[ShopifyOrderWebhook] Unknown or unrecognized SKU: {}", sku);
-                    continue; // Preserve existing behavior for genuinely unrelated SKUs
+                // 3. Try resolving via itemTitle if still null
+                if (kiyuziyuProduct == null && !itemTitle.isEmpty()) {
+                    List<String> titleCandidates = new ArrayList<>();
+                    titleCandidates.add(itemTitle.trim());
+                    String lowerTitle = itemTitle.toLowerCase().trim();
+                    if (lowerTitle.startsWith("kiyu ziyu ")) {
+                        titleCandidates.add(itemTitle.substring(10).trim());
+                    } else if (lowerTitle.startsWith("kiyuziyu ")) {
+                        titleCandidates.add(itemTitle.substring(9).trim());
+                    }
+
+                    for (String tc : titleCandidates) {
+                        try {
+                            kiyuziyuProduct = productRepository.findById(tc);
+                            if (kiyuziyuProduct != null) {
+                                productCode = kiyuziyuProduct.getProductCode();
+                                break;
+                            }
+                        } catch (Exception ignored) {}
+                    }
                 }
 
-                // Validate Shopify line-item quantity safely for recognized Kiyuziyu item (Requirements 1 & 2)
+                boolean isRecognized = (kiyuziyuProduct != null);
+                if (isRecognized) {
+                    recognizedCount++;
+                }
+
+                // 4. Fallback product representation so that no Shopify line item is EVER dropped from the order
+                if (kiyuziyuProduct == null) {
+                    log.info("[ShopifyOrderWebhook] Line item (SKU: '{}', shopifyProductId: '{}', title: '{}', variant: '{}') not matched in master catalog. Retaining in order as standalone line item.",
+                            sku, shopifyProductId, itemTitle, variantTitle);
+                    kiyuziyuProduct = new Product();
+                    kiyuziyuProduct.setId("shopify_" + (!shopifyProductId.isEmpty() ? shopifyProductId : UUID.randomUUID().toString().replace("-", "")));
+                    kiyuziyuProduct.setProductName(!itemTitle.isEmpty() ? itemTitle : "Product");
+                    kiyuziyuProduct.setProductCode(!sku.isEmpty() ? sku : (!shopifyProductId.isEmpty() ? shopifyProductId : "ITEM"));
+                    try {
+                        kiyuziyuProduct.setBasePrice(Double.parseDouble(String.valueOf(item.get("price"))));
+                    } catch (Exception ignored) {
+                        kiyuziyuProduct.setBasePrice(0.0);
+                    }
+                    kiyuziyuProduct.setPurchaseRate(0.0);
+                    productCode = kiyuziyuProduct.getProductCode();
+                }
+
+                // Ensure productCode is populated
+                if (productCode == null || productCode.isEmpty()) {
+                    productCode = kiyuziyuProduct.getProductCode() != null ? kiyuziyuProduct.getProductCode() : kiyuziyuProduct.getId();
+                }
+
+                // Unique product cache key (documentId first, fallback to productCode)
+                String prodKey = (kiyuziyuProduct.getId() != null && !kiyuziyuProduct.getId().trim().isEmpty())
+                        ? kiyuziyuProduct.getId().trim()
+                        : productCode;
+
+                if (productCache.containsKey(prodKey)) {
+                    kiyuziyuProduct = productCache.get(prodKey);
+                } else {
+                    productCache.put(prodKey, kiyuziyuProduct);
+                }
+
+                // Identify variant index
+                List<Map<String, Object>> vars = kiyuziyuProduct.getVariations();
+                int matchedVariantIdx = -1;
+                boolean hasInvalidVariantSkuForItem = false;
+
+                if (vars != null && !vars.isEmpty()) {
+                    // A) Match by shopifyVariantId
+                    if (!shopifyVariantId.isEmpty()) {
+                        for (int vi = 0; vi < vars.size(); vi++) {
+                            Map<String, Object> v = vars.get(vi);
+                            String vId = v.get("shopifyVariantId") != null ? String.valueOf(v.get("shopifyVariantId")).trim()
+                                    : (v.get("variantId") != null ? String.valueOf(v.get("variantId")).trim()
+                                    : (v.get("shopify_variant_id") != null ? String.valueOf(v.get("shopify_variant_id")).trim()
+                                    : (v.get("id") != null ? String.valueOf(v.get("id")).trim() : "")));
+                            if (vId.contains("/")) vId = vId.substring(vId.lastIndexOf('/') + 1);
+                            if (!vId.isEmpty() && vId.equalsIgnoreCase(shopifyVariantId)) {
+                                matchedVariantIdx = vi;
+                                break;
+                            }
+                        }
+                    }
+
+                    // B) Match by direct variation SKU
+                    if (matchedVariantIdx == -1 && !sku.isEmpty()) {
+                        for (int vi = 0; vi < vars.size(); vi++) {
+                            Map<String, Object> v = vars.get(vi);
+                            String vSku = v.get("sku") != null ? String.valueOf(v.get("sku")).trim() : "";
+                            if (!vSku.isEmpty() && vSku.equalsIgnoreCase(sku)) {
+                                matchedVariantIdx = vi;
+                                break;
+                            }
+                        }
+                    }
+
+                    // C) Match by safe suffix parser in SKU
+                    if (matchedVariantIdx == -1 && !sku.isEmpty()) {
+                        com.kiyuziyu.api.util.ShopifySkuParser.SkuParseResult parsedSku = com.kiyuziyu.api.util.ShopifySkuParser.parse(sku);
+                        if (parsedSku.hasVariantSuffix()) {
+                            if (parsedSku.getVariantIndex() >= 0 && parsedSku.getVariantIndex() < vars.size()) {
+                                matchedVariantIdx = parsedSku.getVariantIndex();
+                            } else {
+                                log.warn("[ShopifyOrderWebhook] SKU '{}' has out-of-range variant index {} for product '{}' (variations={})",
+                                        sku, parsedSku.getVariantIndex() + 1, productCode, vars.size());
+                                hasInvalidVariantSkuForItem = true;
+                            }
+                        }
+                    }
+
+                    // D) Match by variantTitle / color / name / title / size comparing normalized strings
+                    if (matchedVariantIdx == -1 && !hasInvalidVariantSkuForItem && !variantTitle.isEmpty() && !"Default Title".equalsIgnoreCase(variantTitle)) {
+                        String cleanVT = com.kiyuziyu.api.util.ShopifySkuParser.normalize(variantTitle).toLowerCase();
+                        for (int vi = 0; vi < vars.size(); vi++) {
+                            Map<String, Object> v = vars.get(vi);
+                            String vColor = v.get("color") != null ? com.kiyuziyu.api.util.ShopifySkuParser.normalize(String.valueOf(v.get("color"))).toLowerCase() : "";
+                            String vName = v.get("name") != null ? com.kiyuziyu.api.util.ShopifySkuParser.normalize(String.valueOf(v.get("name"))).toLowerCase() : "";
+                            String vTitle = v.get("title") != null ? com.kiyuziyu.api.util.ShopifySkuParser.normalize(String.valueOf(v.get("title"))).toLowerCase() : "";
+                            String vSize = v.get("size") != null ? com.kiyuziyu.api.util.ShopifySkuParser.normalize(String.valueOf(v.get("size"))).toLowerCase() : "";
+                            String vVarName = v.get("variantName") != null ? com.kiyuziyu.api.util.ShopifySkuParser.normalize(String.valueOf(v.get("variantName"))).toLowerCase() : "";
+
+                            if ((!vVarName.isEmpty() && (cleanVT.equals(vVarName) || cleanVT.contains(vVarName) || vVarName.contains(cleanVT))) ||
+                                (!vColor.isEmpty() && (cleanVT.equals(vColor) || cleanVT.contains(vColor) || vColor.contains(cleanVT))) ||
+                                (!vName.isEmpty() && (cleanVT.equals(vName) || cleanVT.contains(vName) || vName.contains(cleanVT))) ||
+                                (!vTitle.isEmpty() && (cleanVT.equals(vTitle) || cleanVT.contains(vTitle) || vTitle.contains(cleanVT))) ||
+                                (!vSize.isEmpty() && (cleanVT.equals(vSize) || cleanVT.contains(vSize) || vSize.contains(cleanVT)))) {
+                                matchedVariantIdx = vi;
+                                break;
+                            }
+                        }
+                    }
+
+                    // E) Single variation defaults to index 0
+                    if (matchedVariantIdx == -1 && !hasInvalidVariantSkuForItem && vars.size() == 1) {
+                        matchedVariantIdx = 0;
+                    }
+
+                    // F) Multi-variant safe check: if still unmatched on multi-variant product, fail safe
+                    if (matchedVariantIdx == -1 && !hasInvalidVariantSkuForItem && vars.size() > 1) {
+                        log.warn("[ShopifyOrderWebhook] Multi-variant product '{}' (variations={}) cannot be safely matched for SKU '{}', variantTitle '{}'. Ambiguous variant mapping.",
+                                productCode, vars.size(), sku, variantTitle);
+                        hasInvalidVariantSkuForItem = true;
+                    }
+                } else {
+                    matchedVariantIdx = -1; // Non-variant product
+                }
+
+                if (hasInvalidVariantSkuForItem) {
+                    hasInvalidVariantSku = true;
+                    break;
+                }
+
+                // Validate Shopify line-item quantity
                 Object rawQtyObj = item.get("quantity");
                 Integer validQty = parsePositiveQuantity(rawQtyObj);
                 if (validQty == null || validQty <= 0) {
-                    log.error("[ShopifyOrderWebhook] Recognized Kiyuziyu item (SKU '{}', productCode '{}') has invalid/non-positive/overflow quantity '{}'. Rejecting entire order.",
+                    log.error("[ShopifyOrderWebhook] Recognized Kiyuziyu item (SKU '{}', productCode '{}') has invalid quantity '{}'. Rejecting entire order.",
                             sku, productCode, rawQtyObj);
                     hasInvalidQuantity = true;
                     break;
                 }
 
-                productCache.put(productCode, kiyuziyuProduct);
-                validatedItems.add(new ValidatedLineItem(item, kiyuziyuProduct, productCode, matchedVariantIdx, validQty));
+                validatedItems.add(new ValidatedLineItem(item, kiyuziyuProduct, prodKey, productCode, matchedVariantIdx, validQty, isRecognized));
             }
 
-            // Fail safely if any variant SKU was missing, malformed, or out of range,
-            // or if any recognized Kiyuziyu line item had an invalid/non-positive/overflow quantity (Requirement 1).
-            // Do not update inventory and do not create partial orders.
             if (hasInvalidVariantSku || hasInvalidQuantity) {
-                log.error("[ShopifyOrderWebhook] Order #{} failed line-item validation (invalid variant SKU or recognized item quantity). Failing safely to prevent inventory desynchronization.", orderNumber);
+                log.error("[ShopifyOrderWebhook] Order #{} failed line-item validation (invalid/ambiguous variant SKU or invalid quantity). Failing safely to prevent inventory desynchronization.", orderNumber);
                 return;
             }
 
-            // Phase 2: All recognized line items are valid. Now build order items, update totals, and apply in-memory deductions.
+            if (recognizedCount == 0) {
+                log.info("[ShopifyOrderWebhook] Order #{} has no recognized Kiyuziyu products. Ignoring order.", orderNumber);
+                return;
+            }
+
+            // Phase 2: Build order items, update totals, and apply in-memory deductions
             for (ValidatedLineItem vi : validatedItems) {
                 Map<String, Object> item = vi.rawItem;
                 Product kiyuziyuProduct = vi.product;
+                String prodKey = vi.prodKey;
                 String productCode = vi.productCode;
                 int matchedVariantIdx = vi.matchedVariantIdx;
                 int qty = vi.quantity;
-                String sku = (String) item.get("sku");
+                String rawSku = item.get("sku") != null ? String.valueOf(item.get("sku")).trim() : "";
+                String rawVariantId = item.get("variant_id") != null ? String.valueOf(item.get("variant_id")).trim() : "";
+                if (rawVariantId.contains("/")) rawVariantId = rawVariantId.substring(rawVariantId.lastIndexOf('/') + 1);
 
-                // It's a Kiyuziyu Product
+                String prodName = (String) item.get("title");
+                if (prodName == null || prodName.trim().isEmpty()) {
+                    prodName = kiyuziyuProduct.getProductName();
+                }
+
+                String variantName = (String) item.get("variant_title");
+                String lineSku = rawSku;
+
+                if (matchedVariantIdx >= 0 && kiyuziyuProduct.getVariations() != null && matchedVariantIdx < kiyuziyuProduct.getVariations().size()) {
+                    Map<String, Object> targetVar = kiyuziyuProduct.getVariations().get(matchedVariantIdx);
+                    if (variantName == null || variantName.trim().isEmpty() || "Default Title".equalsIgnoreCase(variantName.trim())) {
+                        String c = targetVar.get("color") != null ? String.valueOf(targetVar.get("color")).trim() : "";
+                        String s = targetVar.get("size") != null ? String.valueOf(targetVar.get("size")).trim() : "";
+                        String n = targetVar.get("name") != null ? String.valueOf(targetVar.get("name")).trim() : "";
+                        if (n.isEmpty() && targetVar.get("title") != null) n = String.valueOf(targetVar.get("title")).trim();
+                        if (n.isEmpty() && targetVar.get("variantName") != null) n = String.valueOf(targetVar.get("variantName")).trim();
+
+                        List<String> parts = new ArrayList<>();
+                        if (!c.isEmpty()) parts.add(c);
+                        if (!s.isEmpty()) parts.add(s);
+                        if (parts.isEmpty() && !n.isEmpty()) parts.add(n);
+                        variantName = !parts.isEmpty() ? String.join(" / ", parts) : "Variant " + (matchedVariantIdx + 1);
+                    }
+                    if (lineSku.isEmpty()) {
+                        if (targetVar.get("sku") != null && !String.valueOf(targetVar.get("sku")).trim().isEmpty()) {
+                            lineSku = String.valueOf(targetVar.get("sku")).trim();
+                        } else {
+                            lineSku = productCode + (kiyuziyuProduct.getVariations().size() > 1 ? "-" + (matchedVariantIdx + 1) : "");
+                        }
+                    }
+                    if (rawVariantId.isEmpty()) {
+                        if (targetVar.get("variantId") != null) rawVariantId = String.valueOf(targetVar.get("variantId")).trim();
+                        else if (targetVar.get("shopifyVariantId") != null) rawVariantId = String.valueOf(targetVar.get("shopifyVariantId")).trim();
+                    }
+                } else {
+                    if (lineSku.isEmpty()) {
+                        lineSku = productCode;
+                    }
+                }
+
                 TenantOrderItem tItem = new TenantOrderItem();
                 tItem.setProductId(kiyuziyuProduct.getId());
                 tItem.setCollectionId(kiyuziyuProduct.getCollectionId());
                 tItem.setSubcollectionId(kiyuziyuProduct.getSubcollectionId());
                 tItem.setProductCode(productCode);
-                tItem.setProductName((String) item.get("title"));
-                tItem.setVariantName((String) item.get("variant_title"));
+                tItem.setProductName(prodName);
+                tItem.setVariantName(variantName);
+                tItem.setSku(lineSku);
+                if (!rawVariantId.isEmpty()) {
+                    tItem.setVariantId(rawVariantId);
+                }
                 tItem.setQuantity(qty);
 
                 Double sellingPrice = Double.parseDouble(String.valueOf(item.get("price")));
@@ -281,82 +570,109 @@ public class ShopifyOrderWebhookService {
                 // ==========================================
                 // INVENTORY DEDUCTION LOGIC (IN MEMORY)
                 // ==========================================
-                try {
-                    List<Map<String, Object>> variations = kiyuziyuProduct.getVariations();
-                    if (variations != null && !variations.isEmpty()) {
-                        if (matchedVariantIdx >= 0 && matchedVariantIdx < variations.size()) {
-                            // Create a mutable copy of the variations list and maps
-                            List<Map<String, Object>> mutableVariations = new java.util.ArrayList<>();
-                            for (int i = 0; i < variations.size(); i++) {
-                                mutableVariations.add(new java.util.HashMap<>(variations.get(i)));
+                // Check if this item was already deducted in an existing order
+                boolean isAlreadyInStored = false;
+                if (isRepairingExisting && alreadyStoredItems != null) {
+                    for (Map<String, Object> si : alreadyStoredItems) {
+                        String sSku = si.get("sku") != null ? String.valueOf(si.get("sku")).trim() : "";
+                        String sVarId = si.get("variantId") != null ? String.valueOf(si.get("variantId")).trim() : "";
+                        String sPCode = si.get("productCode") != null ? String.valueOf(si.get("productCode")).trim() : "";
+                        String sVName = si.get("variantName") != null ? String.valueOf(si.get("variantName")).trim() : "";
+
+                        if (!rawVariantId.isEmpty() && !sVarId.isEmpty() && rawVariantId.equalsIgnoreCase(sVarId)) {
+                            isAlreadyInStored = true;
+                            break;
+                        }
+                        if (!lineSku.isEmpty() && !sSku.isEmpty() && lineSku.equalsIgnoreCase(sSku)) {
+                            isAlreadyInStored = true;
+                            break;
+                        }
+                        if (!productCode.isEmpty() && !sPCode.isEmpty() && productCode.equalsIgnoreCase(sPCode)) {
+                            if ((variantName == null && sVName.isEmpty()) || (variantName != null && variantName.equalsIgnoreCase(sVName))) {
+                                isAlreadyInStored = true;
+                                break;
                             }
+                        }
+                    }
+                }
 
-                            Map<String, Object> targetVariant = mutableVariations.get(matchedVariantIdx);
-                            Object rawQty = targetVariant.get("quantity");
-                            if (rawQty == null) rawQty = targetVariant.get("initialQuantity");
+                if (isAlreadyInStored) {
+                    log.info("[ShopifyOrderWebhook] Item SKU {} / variantId {} already present in stored order. Skipping inventory re-deduction.",
+                            lineSku, rawVariantId);
+                    continue;
+                }
+                if (vi.isRecognized) {
+                    try {
+                        List<Map<String, Object>> variations = kiyuziyuProduct.getVariations();
+                        if (variations != null && !variations.isEmpty()) {
+                            if (matchedVariantIdx >= 0 && matchedVariantIdx < variations.size()) {
+                                List<Map<String, Object>> mutableVariations = new java.util.ArrayList<>();
+                                for (Map<String, Object> v : variations) {
+                                    mutableVariations.add(new java.util.HashMap<>(v));
+                                }
 
+                                Map<String, Object> targetVariant = mutableVariations.get(matchedVariantIdx);
+                                Object rawQty = targetVariant.get("quantity");
+                                if (rawQty == null) rawQty = targetVariant.get("initialQuantity");
+
+                                int currentQty = 0;
+                                if (rawQty instanceof Number) currentQty = ((Number) rawQty).intValue();
+                                else if (rawQty instanceof String) {
+                                    try { currentQty = Integer.parseInt(((String) rawQty).trim()); } catch (Exception ignored) {}
+                                }
+
+                                int newQty = Math.max(0, currentQty - qty);
+                                targetVariant.put("quantity", newQty);
+
+                                // Set updated variations back on product
+                                kiyuziyuProduct.setVariations(mutableVariations);
+
+                                // Compute updated root quantity across variations
+                                int totalStock = 0;
+                                for (Map<String, Object> v : mutableVariations) {
+                                    Object vq = v.get("quantity");
+                                    if (vq == null) vq = v.get("initialQuantity");
+                                    int vQty = 0;
+                                    if (vq instanceof Number) vQty = ((Number) vq).intValue();
+                                    else if (vq instanceof String) {
+                                        try { vQty = Integer.parseInt(((String) vq).trim()); } catch (Exception ignored) {}
+                                    }
+                                    totalStock += vQty;
+                                }
+                                kiyuziyuProduct.setQuantity(totalStock);
+                                productUpdated.put(prodKey, true);
+
+                                log.info("[ShopifyOrderWebhook] Deducted memory inventory for variant idx={} (SKU={}): {} -> {}, totalStock={}",
+                                        matchedVariantIdx, lineSku, currentQty, newQty, totalStock);
+                            }
+                        } else {
+                            // Main product (no variations)
                             int currentQty = 0;
-                            if (rawQty instanceof Number) currentQty = ((Number) rawQty).intValue();
-                            else if (rawQty instanceof String) {
-                                try { currentQty = Integer.parseInt(((String) rawQty).trim()); } catch (Exception ignored) {}
+                            Object q = kiyuziyuProduct.getQuantity();
+                            if (q == null) q = kiyuziyuProduct.getInitialQuantity();
+                            if (q instanceof Number) currentQty = ((Number) q).intValue();
+                            else if (q instanceof String) {
+                                try { currentQty = Integer.parseInt(((String) q).trim()); } catch (Exception ignored) {}
                             }
 
                             int newQty = Math.max(0, currentQty - qty);
-                            targetVariant.put("quantity", newQty);
-
-                            // Set the updated mutable list back to the product
-                            kiyuziyuProduct.setVariations(mutableVariations);
-
-                            // Compute updated total root quantity as sum of current variant quantities
-                            int totalStock = 0;
-                            for (Map<String, Object> v : mutableVariations) {
-                                Object vq = v.get("quantity");
-                                if (vq == null) vq = v.get("initialQuantity");
-                                int vQty = 0;
-                                if (vq instanceof Number) vQty = ((Number) vq).intValue();
-                                else if (vq instanceof String) {
-                                    try { vQty = Integer.parseInt(((String) vq).trim()); } catch (Exception ignored) {}
-                                }
-                                totalStock += vQty;
-                            }
-                            kiyuziyuProduct.setQuantity(totalStock);
-
-                            productUpdated.put(productCode, true);
-                            log.info("[ShopifyOrderWebhook] Deducted memory inventory for variant idx={} (SKU={}): {} -> {}, totalStock={}",
-                                    matchedVariantIdx, sku, currentQty, newQty, totalStock);
-                        } else {
-                            log.warn("[ShopifyOrderWebhook] Ambiguous or unrecognized variant mapping for SKU '{}' (productCode='{}', variationsCount={}).",
-                                    sku, productCode, variations.size());
-                            hasInvalidVariantSku = true;
+                            kiyuziyuProduct.setQuantity(newQty);
+                            productUpdated.put(prodKey, true);
+                            log.info("[ShopifyOrderWebhook] Deducted memory inventory for main product {}: {} -> {}",
+                                    productCode, currentQty, newQty);
                         }
-                    } else {
-                        // Main product (no variations)
-                        int currentQty = 0;
-                        Object q = kiyuziyuProduct.getQuantity();
-                        if (q == null) q = kiyuziyuProduct.getInitialQuantity();
-                        if (q instanceof Number) currentQty = ((Number) q).intValue();
-                        else if (q instanceof String) {
-                            try { currentQty = Integer.parseInt(((String) q).trim()); } catch (Exception ignored) {}
-                        }
-
-                        int newQty = Math.max(0, currentQty - qty);
-                        kiyuziyuProduct.setQuantity(newQty);
-                        productUpdated.put(productCode, true);
-                        log.info("[ShopifyOrderWebhook] Deducted memory inventory for main product {}: {} -> {}",
-                                productCode, currentQty, newQty);
+                    } catch (Exception e) {
+                        log.warn("[ShopifyOrderWebhook] Failed to deduct inventory for SKU {}: {}", lineSku, e.getMessage());
                     }
-                } catch (Exception e) {
-                    log.warn("[ShopifyOrderWebhook] Failed to deduct inventory for SKU {}: {}", sku, e.getMessage());
                 }
-                // ==========================================
             }
 
             // ==========================================
-            // BATCH UPDATE FIRESTORE
+            // PERSIST UPDATES TO FIRESTORE
             // ==========================================
             for (Map.Entry<String, Product> entry : productCache.entrySet()) {
-                String productCode = entry.getKey();
-                if (productUpdated.getOrDefault(productCode, false)) {
+                String pKey = entry.getKey();
+                if (productUpdated.getOrDefault(pKey, false)) {
                     Product p = entry.getValue();
                     try {
                         Map<String, Object> updates = new java.util.HashMap<>();
@@ -366,45 +682,119 @@ public class ShopifyOrderWebhookService {
                         } else {
                             updates.put("quantity", p.getQuantity());
                         }
-                        
-                        Query query = firestore.collectionGroup("products").whereEqualTo("productCode", productCode);
-                        List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
-                        if (!docs.isEmpty()) {
-                            for (QueryDocumentSnapshot doc : docs) {
-                                RealtimeStockListener.suppressLoop(doc.getId());
-                                RealtimeStockListener.suppressLoop(productCode);
-                                doc.getReference().update(updates).get();
+                        updates.put("updatedAt", Instant.now().toString());
+
+                        String colId = p.getCollectionId();
+                        String subId = p.getSubcollectionId();
+                        String productId = p.getId();
+                        String pCode = p.getProductCode();
+
+                        boolean updated = false;
+
+                        // Priority 1: Exact Firestore path: collections/{collectionId}/subcollections/{subcollectionId}/products/{productId}
+                        if (colId != null && !colId.trim().isEmpty() &&
+                            subId != null && !subId.trim().isEmpty() &&
+                            productId != null && !productId.trim().isEmpty()) {
+                            try {
+                                com.google.cloud.firestore.DocumentReference docRef = firestore.collection("collections").document(colId.trim())
+                                        .collection("subcollections").document(subId.trim())
+                                        .collection("products").document(productId.trim());
+                                RealtimeStockListener.suppressLoop(productId.trim());
+                                if (pCode != null) RealtimeStockListener.suppressLoop(pCode.trim());
+                                docRef.update(updates).get();
+                                updated = true;
+                                log.info("[ShopifyOrderWebhook] Successfully updated exact product at collections/{}/subcollections/{}/products/{}",
+                                        colId, subId, productId);
+                            } catch (Exception ex) {
+                                log.warn("[ShopifyOrderWebhook] Direct path update failed for {}/{}/{}: {}", colId, subId, productId, ex.getMessage());
                             }
-                            log.info("Batch Firebase inventory updated for {}", productCode);
+                        }
+
+                        // Priority 1B: If colId/subId was missing, refetch master product to get exact path
+                        if (!updated && productId != null && !productId.trim().isEmpty()) {
+                            try {
+                                Product refetched = productRepository.findByDocumentId(productId.trim());
+                                if (refetched != null && refetched.getCollectionId() != null && refetched.getSubcollectionId() != null) {
+                                    com.google.cloud.firestore.DocumentReference docRef = firestore.collection("collections").document(refetched.getCollectionId())
+                                            .collection("subcollections").document(refetched.getSubcollectionId())
+                                            .collection("products").document(productId.trim());
+                                    RealtimeStockListener.suppressLoop(productId.trim());
+                                    if (pCode != null) RealtimeStockListener.suppressLoop(pCode.trim());
+                                    docRef.update(updates).get();
+                                    updated = true;
+                                    log.info("[ShopifyOrderWebhook] Successfully updated exact product via refetched path: collections/{}/subcollections/{}/products/{}",
+                                            refetched.getCollectionId(), refetched.getSubcollectionId(), productId);
+                                }
+                            } catch (Exception ex) {
+                                log.warn("[ShopifyOrderWebhook] Refetched direct path update failed: {}", ex.getMessage());
+                            }
+                        }
+
+                        // Priority 2: Fallback query via collectionGroup
+                        if (!updated) {
+                            try {
+                                Query query = null;
+                                if (pCode != null && !pCode.trim().isEmpty()) {
+                                    query = firestore.collectionGroup("products").whereEqualTo("productCode", pCode.trim());
+                                }
+                                if (query != null) {
+                                    List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
+                                    if (docs.isEmpty()) {
+                                        query = firestore.collectionGroup("products").whereEqualTo("productCode", pCode.trim() + " ");
+                                        docs = query.get().get().getDocuments();
+                                    }
+                                    if (docs.isEmpty()) {
+                                        query = firestore.collectionGroup("products").whereEqualTo("productCode", pCode.trim() + "  ");
+                                        docs = query.get().get().getDocuments();
+                                    }
+                                    if (!docs.isEmpty()) {
+                                        for (QueryDocumentSnapshot doc : docs) {
+                                            if (productId != null && !productId.trim().isEmpty() && !doc.getId().equals(productId.trim()) && docs.size() > 1) {
+                                                continue;
+                                            }
+                                            RealtimeStockListener.suppressLoop(doc.getId());
+                                            if (pCode != null) RealtimeStockListener.suppressLoop(pCode.trim());
+                                            doc.getReference().update(updates).get();
+                                            updated = true;
+                                        }
+                                        log.info("[ShopifyOrderWebhook] Updated product via collectionGroup for {}", pCode);
+                                    }
+                                }
+                            } catch (Exception ex) {
+                                log.warn("[ShopifyOrderWebhook] collectionGroup query failed for {}: {}", pCode, ex.getMessage());
+                            }
+                        }
+
+                        // Priority 3: Fallback iteration across collections and subcollections
+                        if (!updated && pCode != null && !pCode.trim().isEmpty()) {
+                            try {
+                                Iterable<com.google.cloud.firestore.DocumentReference> collections = firestore.collection("collections").listDocuments();
+                                for (com.google.cloud.firestore.DocumentReference cRef : collections) {
+                                    Iterable<com.google.cloud.firestore.DocumentReference> subcollections = cRef.collection("subcollections").listDocuments();
+                                    for (com.google.cloud.firestore.DocumentReference sRef : subcollections) {
+                                        Query q = sRef.collection("products").whereEqualTo("productCode", pCode.trim());
+                                        List<QueryDocumentSnapshot> docs = q.get().get().getDocuments();
+                                        if (!docs.isEmpty()) {
+                                            for (QueryDocumentSnapshot doc : docs) {
+                                                if (productId != null && !productId.trim().isEmpty() && !doc.getId().equals(productId.trim()) && docs.size() > 1) {
+                                                    continue;
+                                                }
+                                                RealtimeStockListener.suppressLoop(doc.getId());
+                                                RealtimeStockListener.suppressLoop(pCode.trim());
+                                                doc.getReference().update(updates).get();
+                                                updated = true;
+                                            }
+                                        }
+                                        if (updated) break;
+                                    }
+                                    if (updated) break;
+                                }
+                            } catch (Exception ex) {
+                                log.warn("[ShopifyOrderWebhook] Fallback iteration failed for {}: {}", pCode, ex.getMessage());
+                            }
                         }
                     } catch (Exception ex) {
-                        log.warn("CollectionGroup query failed for {}. Falling back to iteration...", productCode);
-                        Iterable<com.google.cloud.firestore.DocumentReference> collections = firestore.collection("collections").listDocuments();
-                        boolean found = false;
-                        for (com.google.cloud.firestore.DocumentReference colRef : collections) {
-                            Iterable<com.google.cloud.firestore.DocumentReference> subcollections = colRef.collection("subcollections").listDocuments();
-                            for (com.google.cloud.firestore.DocumentReference subRef : subcollections) {
-                                Query q = subRef.collection("products").whereEqualTo("productCode", productCode);
-                                List<QueryDocumentSnapshot> docs = q.get().get().getDocuments();
-                                if (!docs.isEmpty()) {
-                                    Map<String, Object> fallbackUpdates = new java.util.HashMap<>();
-                                    if (p.getVariations() != null && !p.getVariations().isEmpty()) {
-                                        fallbackUpdates.put("variations", p.getVariations());
-                                        fallbackUpdates.put("quantity", p.getQuantity());
-                                    } else {
-                                        fallbackUpdates.put("quantity", p.getQuantity());
-                                    }
-                                    for (QueryDocumentSnapshot doc : docs) {
-                                        RealtimeStockListener.suppressLoop(doc.getId());
-                                        RealtimeStockListener.suppressLoop(productCode);
-                                        doc.getReference().update(fallbackUpdates).get();
-                                    }
-                                    log.info("Batch Firebase inventory updated for {} via fallback", productCode);
-                                    found = true;
-                                }
-                            }
-                            if (found) break;
-                        }
+                        log.error("[ShopifyOrderWebhook] Failed to persist updates for product key {}: {}", pKey, ex.getMessage());
                     }
                 }
             }
@@ -414,38 +804,68 @@ public class ShopifyOrderWebhookService {
                 return;
             }
 
-            // Create and save TenantOrder
-            TenantOrder order = new TenantOrder();
-            order.setOrderId(internalOrderId);
-            order.setTenantId(resolvedTenantId);
-            if (resolvedStoreId != null) {
-                order.setStoreId(resolvedStoreId);
+            if (isRepairingExisting && existingDoc != null) {
+                Map<String, Object> updates = new java.util.HashMap<>();
+                updates.put("items", kiyuziyuItems);
+                updates.put("totalBasePrice", totalBase);
+                updates.put("totalSellingPrice", totalSelling);
+                updates.put("totalProfit", totalSelling - totalBase);
+                updates.put("totalPurchasePrice", totalPurchase);
+                updates.put("totalAdminProfit", totalAdminProfitAmount);
+                updates.put("updatedAt", Instant.now().toString());
+
+                if (isMeaningful(customerName)) updates.put("customerName", customerName.trim());
+                if (isMeaningful(customerEmail)) updates.put("customerEmail", customerEmail);
+                if (isMeaningful(customerPhone)) updates.put("customerPhone", customerPhone);
+                if (isMeaningful(shippingAddressStr)) updates.put("shippingAddress", shippingAddressStr);
+                if (isMeaningful(billingAddressStr)) updates.put("billingAddress", billingAddressStr);
+                if (isMeaningful(details.currency)) updates.put("currency", details.currency);
+                if (isMeaningful(paymentMethodStr)) updates.put("paymentMethod", paymentMethodStr);
+                if (isMeaningful(shippingMethodStr)) updates.put("shippingMethod", shippingMethodStr);
+                if (isMeaningful(customerNoteStr)) updates.put("customerNote", customerNoteStr);
+
+                String financialStatus = payload.get("financial_status") != null ? String.valueOf(payload.get("financial_status")) : "";
+                if ("paid".equalsIgnoreCase(financialStatus)) {
+                    updates.put("status", "Payment Done");
+                }
+
+                existingDoc.getReference().update(updates).get();
+                log.info("[ShopifyOrderWebhook] Successfully repaired and updated existing Order doc: {} with complete items ({})",
+                        existingDoc.getId(), kiyuziyuItems.size());
+            } else {
+                // Create and save TenantOrder
+                TenantOrder order = new TenantOrder();
+                order.setOrderId(internalOrderId);
+                order.setTenantId(resolvedTenantId);
+                if (resolvedStoreId != null) {
+                    order.setStoreId(resolvedStoreId);
+                }
+                order.setShopifyOrderId(shopifyOrderId);
+                order.setOrderNumber(orderNumber);
+                order.setCustomerName(customerName.trim());
+                order.setCustomerEmail(customerEmail);
+                order.setTotalBasePrice(totalBase);
+                order.setTotalSellingPrice(totalSelling);
+                order.setTotalProfit(totalSelling - totalBase);
+                order.setTotalPurchasePrice(totalPurchase);
+                order.setTotalAdminProfit(totalAdminProfitAmount);
+                order.setItems(kiyuziyuItems);
+                order.setCustomerPhone(customerPhone);
+                order.setShippingAddress(shippingAddressStr);
+                order.setBillingAddress(billingAddressStr);
+                order.setCustomerNote(customerNoteStr);
+                order.setPaymentMethod(paymentMethodStr);
+                order.setShippingMethod(shippingMethodStr);
+                order.setCurrency(details.currency);
+
+                String financialStatus = payload.get("financial_status") != null ? String.valueOf(payload.get("financial_status")) : "";
+                String initialStatus = "paid".equalsIgnoreCase(financialStatus) ? "Payment Done" : "Pending Payment";
+                order.setStatus(initialStatus);
+                order.setCreatedAt(Instant.now().toString());
+
+                tenantOrderRepository.save(order);
+                log.info("[ShopifyOrderWebhook] Successfully saved Kiyuziyu Order {} with {} items.", order.getOrderId(), kiyuziyuItems.size());
             }
-            order.setShopifyOrderId(shopifyOrderId);
-            order.setOrderNumber(orderNumber);
-            order.setCustomerName(customerName.trim());
-            order.setCustomerEmail(customerEmail);
-            order.setTotalBasePrice(totalBase);
-            order.setTotalSellingPrice(totalSelling);
-            order.setTotalProfit(totalSelling - totalBase);
-            order.setTotalPurchasePrice(totalPurchase);
-            order.setTotalAdminProfit(totalAdminProfitAmount);
-            order.setItems(kiyuziyuItems);
-            order.setCustomerPhone(customerPhone);
-            order.setShippingAddress(shippingAddressStr);
-            order.setBillingAddress(billingAddressStr);
-            order.setCustomerNote(customerNoteStr);
-            order.setPaymentMethod(paymentMethodStr);
-            order.setShippingMethod(shippingMethodStr);
-            order.setCurrency(details.currency);
-
-            String financialStatus = payload.get("financial_status") != null ? String.valueOf(payload.get("financial_status")) : "";
-            String initialStatus = "paid".equalsIgnoreCase(financialStatus) ? "Payment Done" : "Pending Payment";
-            order.setStatus(initialStatus);
-            order.setCreatedAt(Instant.now().toString());
-
-            tenantOrderRepository.save(order);
-            log.info("[ShopifyOrderWebhook] Successfully saved Kiyuziyu Order {} with {} items.", order.getOrderId(), kiyuziyuItems.size());
 
         } catch (Exception e) {
             log.error("[ShopifyOrderWebhook] Error processing order payload: {}", e.getMessage(), e);
@@ -721,16 +1141,20 @@ public class ShopifyOrderWebhookService {
     private static class ValidatedLineItem {
         final Map<String, Object> rawItem;
         final Product product;
+        final String prodKey;
         final String productCode;
         final int matchedVariantIdx;
         final int quantity;
+        final boolean isRecognized;
 
-        ValidatedLineItem(Map<String, Object> rawItem, Product product, String productCode, int matchedVariantIdx, int quantity) {
+        ValidatedLineItem(Map<String, Object> rawItem, Product product, String prodKey, String productCode, int matchedVariantIdx, int quantity, boolean isRecognized) {
             this.rawItem = rawItem;
             this.product = product;
+            this.prodKey = prodKey;
             this.productCode = productCode;
             this.matchedVariantIdx = matchedVariantIdx;
             this.quantity = quantity;
+            this.isRecognized = isRecognized;
         }
     }
 }

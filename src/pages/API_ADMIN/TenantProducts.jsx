@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../../firebase';
+import { auth, db } from '../../firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
-import { getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
+import { getUserSession, adminSignOut, getIdToken, API_BASE, apiFetch } from './adminAuth';
 import LogoImage from '../../assets/logoj2.png';
 
 export default function TenantProducts() {
   const [user, setUser] = useState(null);
   const [tenantProfile, setTenantProfile] = useState(null);
+  const tenantProfileRef = useRef(null);
   const [loading, setLoading] = useState(true);
 
   // Shopify Connection
@@ -58,29 +60,61 @@ export default function TenantProducts() {
     setSelectedSubcollection('');
   }, [selectedCollection]);
 
-  const fetchShopifyConnection = useCallback(async () => {
+  const fetchShopifyConnection = useCallback(async (explicitTenantId) => {
+    setShopifyLoading(true);
+    const targetTenantId = explicitTenantId || tenantProfileRef.current?.tenantId;
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.data) {
+        if (data.success && data.data && data.data.status === 'CONNECTED') {
           setShopifyConn(data.data);
+          setShopifyLoading(false);
+          return;
         }
       }
     } catch (err) {
-      console.error('Error fetching shopify connection:', err);
-    } finally {
-      setShopifyLoading(false);
+      console.warn('Backend API connection fetch warning:', err);
     }
+
+    // Direct Firestore check fallback if client rules allow
+    if (targetTenantId) {
+      try {
+        const q = query(collection(db, 'apiShopifyConnections'), where('tenantId', '==', targetTenantId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const connData = snap.docs[0].data();
+          if (connData && connData.status === 'CONNECTED') {
+            setShopifyConn({
+              connectionId: snap.docs[0].id,
+              tenantId: connData.tenantId,
+              storeId: connData.storeId,
+              shopifyStoreDomain: connData.shopifyStoreDomain,
+              shopifyStoreId: connData.shopifyStoreId,
+              status: connData.status,
+              connectedAt: connData.connectedAt,
+              updatedAt: connData.updatedAt,
+              hasAccessToken: !!(connData.accessToken && connData.accessToken.trim())
+            });
+            setShopifyLoading(false);
+            return;
+          }
+        }
+      } catch (fsErr) {
+        console.warn('Firestore fallback fetch warning:', fsErr);
+      }
+    }
+
+    setShopifyLoading(false);
   }, []);
 
   const fetchCollections = useCallback(async () => {
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/tenants/me/products/collections`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/tenants/me/products/collections`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -97,7 +131,7 @@ export default function TenantProducts() {
   const fetchSyncStatus = useCallback(async () => {
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/tenants/me/products/sync-status`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/tenants/me/products/sync-status`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -131,7 +165,7 @@ export default function TenantProducts() {
       if (debouncedSearchQuery && debouncedSearchQuery.trim().length > 0) {
         url += `&search=${encodeURIComponent(debouncedSearchQuery.trim())}`;
       }
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -148,41 +182,57 @@ export default function TenantProducts() {
     }
   }, [selectedCollection, currentPage, debouncedSearchQuery]);
 
+  // Auth verification and initial data load (runs once on mount)
   useEffect(() => {
+    let isMounted = true;
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
-        navigate('/admin/login', { replace: true });
+        if (isMounted) navigate('/admin/login', { replace: true });
         return;
       }
-      setUser(currentUser);
+      if (isMounted) setUser(currentUser);
       try {
         const session = await getUserSession(currentUser.uid);
         if (!session) {
-          navigate('/admin/login', { replace: true });
+          if (isMounted) navigate('/admin/login', { replace: true });
           return;
         }
 
         if (session.type === 'ADMIN') {
-          navigate('/admin/dashboard', { replace: true });
+          if (isMounted) navigate('/admin/dashboard', { replace: true });
           return;
         }
 
-        setTenantProfile(session.profile);
-        await Promise.all([
-          fetchShopifyConnection(),
+        tenantProfileRef.current = session.profile;
+        if (isMounted) {
+          setTenantProfile(session.profile);
+          setLoading(false);
+        }
+
+        await Promise.allSettled([
+          fetchShopifyConnection(session.profile?.tenantId),
           fetchCollections(),
           fetchSyncStatus()
         ]);
-        fetchProducts();
       } catch (err) {
         console.error('Error verifying tenant session:', err);
-        navigate('/admin/login', { replace: true });
+        if (isMounted) navigate('/admin/login', { replace: true });
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     });
-    return () => unsub();
-  }, [navigate, fetchShopifyConnection, fetchCollections, fetchSyncStatus, fetchProducts]);
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, [navigate, fetchShopifyConnection, fetchCollections, fetchSyncStatus]);
+
+  // Products fetch effect: only triggers when tenant profile is ready or when page/filters change
+  useEffect(() => {
+    if (!tenantProfile) return;
+    fetchProducts();
+  }, [tenantProfile, fetchProducts]);
 
   const handleLogout = async () => {
     try {
@@ -199,7 +249,7 @@ export default function TenantProducts() {
     const syncedIds = Array.from(selectedProductIds);
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/tenants/me/products/sync`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/tenants/me/products/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -225,7 +275,7 @@ export default function TenantProducts() {
               return;
             }
             const t = await getIdToken();
-            const sr = await fetch(`${API_BASE}/api/v1/tenants/me/products/sync-status`, {
+            const sr = await apiFetch(`${API_BASE}/api/v1/tenants/me/products/sync-status`, {
               headers: { Authorization: `Bearer ${t}` },
             });
             if (sr.ok) {
@@ -295,7 +345,7 @@ export default function TenantProducts() {
   const savePriceToBackend = async (productCode, newPrice) => {
     try {
       const token = await getIdToken();
-      await fetch(`${API_BASE}/api/v1/tenants/me/products/${encodeURIComponent(productCode)}/price`, {
+      await apiFetch(`${API_BASE}/api/v1/tenants/me/products/${encodeURIComponent(productCode)}/price`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ sellingPrice: newPrice })

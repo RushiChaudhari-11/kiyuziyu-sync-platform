@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, getDoc, doc, updateDoc, onSnapshot, collectionGroup } from 'firebase/firestore';
-import { API_BASE } from './adminAuth';
+import { API_BASE, apiFetch } from './adminAuth';
 
 export const ORDER_STATUSES = [
     'Pending Payment',
@@ -344,7 +344,7 @@ export default function TenantOrders({ tenantId, isAdmin = false, tenants = [] }
 
         // 1. Try Backend Spring Boot Endpoint First (Instant Admin SDK execution)
         try {
-            const apiRes = await fetch(`${API_BASE}/api/v1/tenants/orders/${order.id}/cancel-and-restore`, {
+            const apiRes = await apiFetch(`${API_BASE}/api/v1/tenants/orders/${order.id}/cancel-and-restore`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -404,17 +404,35 @@ export default function TenantOrders({ tenantId, isAdmin = false, tenants = [] }
                     if (pData.variations && Array.isArray(pData.variations) && pData.variations.length > 0) {
                         const newVariations = pData.variations.map((v, idx) => {
                             let match = false;
-                            if (item.sku && item.sku.includes('-')) {
-                                const variantIdx = parseInt(item.sku.split('-')[1], 10) - 1;
+                            const itemSku = String(item.sku || item.productCode || '').trim();
+                            const vSku = String(v.sku || '').trim();
+                            if (vSku && itemSku && vSku.toLowerCase() === itemSku.toLowerCase()) {
+                                match = true;
+                            }
+                            if (!match && item.variantId) {
+                                const vVarId = String(v.shopifyVariantId || v.variantId || v.shopify_variant_id || v.id || '').trim();
+                                const targetVarId = String(item.variantId).includes('/') ? String(item.variantId).substring(String(item.variantId).lastIndexOf('/') + 1) : String(item.variantId);
+                                if (vVarId && (vVarId === targetVarId || vVarId.endsWith('/' + targetVarId))) {
+                                    match = true;
+                                }
+                            }
+                            if (!match && item.sku && item.sku.includes('-')) {
+                                const lastDash = item.sku.lastIndexOf('-');
+                                const suffix = item.sku.substring(lastDash + 1).trim();
+                                const variantIdx = parseInt(suffix, 10) - 1;
                                 if (variantIdx === idx) match = true;
                             }
-                            if (!match && item.variantName && (
-                                String(v.name || '').trim().toLowerCase() === String(item.variantName).trim().toLowerCase() || 
-                                String(v.color || '').trim().toLowerCase() === String(item.variantName).trim().toLowerCase() || 
-                                String(v.title || '').trim().toLowerCase() === String(item.variantName).trim().toLowerCase() ||
-                                String(v.variantName || '').trim().toLowerCase() === String(item.variantName).trim().toLowerCase()
-                            )) {
-                                match = true;
+                            if (!match && (item.variantName || item.variantDetails)) {
+                                const targetName = String(item.variantName || item.variantDetails || '').trim().toLowerCase();
+                                if (
+                                    String(v.name || '').trim().toLowerCase() === targetName || 
+                                    String(v.color || '').trim().toLowerCase() === targetName || 
+                                    String(v.title || '').trim().toLowerCase() === targetName ||
+                                    String(v.variantName || '').trim().toLowerCase() === targetName ||
+                                    (v.color && v.size && `${v.color} / ${v.size}`.toLowerCase() === targetName)
+                                ) {
+                                    match = true;
+                                }
                             }
                             if (match) {
                                 updated = true;
@@ -429,16 +447,22 @@ export default function TenantOrders({ tenantId, isAdmin = false, tenants = [] }
 
                         if (updated) {
                             updates.variations = newVariations;
+                            // Recalculate root quantity as sum of variations
+                            if (pData.quantity !== undefined || pData.stock !== undefined) {
+                                const totalVarStock = newVariations.reduce((acc, curr) => acc + Number(curr.quantity || 0), 0);
+                                if (pData.quantity !== undefined) updates.quantity = totalVarStock;
+                                if (pData.stock !== undefined) updates.stock = totalVarStock;
+                            }
                         }
                     }
 
-                    // 2. Update root quantity if present
-                    if (pData.quantity !== undefined || pData.stock !== undefined) {
+                    // 2. Update root quantity if non-variant or not already updated
+                    if (!updated && (pData.quantity !== undefined || pData.stock !== undefined)) {
                         const rootField = pData.quantity !== undefined ? 'quantity' : 'stock';
                         const curQ = Number(pData[rootField] || 0);
                         updates[rootField] = curQ + qtyToRestore;
                         updated = true;
-                        if (!updates.variations) totalUnitsRestored += qtyToRestore;
+                        totalUnitsRestored += qtyToRestore;
                     }
 
                     if (updated) {
@@ -904,7 +928,8 @@ export default function TenantOrders({ tenantId, isAdmin = false, tenants = [] }
                 (i.productCode || '').toLowerCase().includes(q) ||
                 (i.sku || '').toLowerCase().includes(q) ||
                 (i.productName || '').toLowerCase().includes(q) ||
-                (i.variantName || '').toLowerCase().includes(q)
+                (i.variantName || '').toLowerCase().includes(q) ||
+                (i.variantDetails || '').toLowerCase().includes(q)
             );
 
             // Date text match (e.g. '8 oct', '2026', 'october')
@@ -1764,7 +1789,7 @@ export default function TenantOrders({ tenantId, isAdmin = false, tenants = [] }
                             <thead style={{ backgroundColor: '#f1f5f9' }}>
                                 <tr>
                                     <th style={thStyle}>Product</th>
-                                    <th style={thStyle}>Code</th>
+                                    <th style={thStyle}>SKU / Code</th>
                                     <th style={thStyle}>Variant</th>
                                     <th style={{ ...thStyle, textAlign: 'center' }}>Quantity</th>
                                     {isAdmin ? (
@@ -1796,11 +1821,20 @@ export default function TenantOrders({ tenantId, isAdmin = false, tenants = [] }
                                         const unitBase = item.basePrice || 0;
                                         const unitSelling = item.sellingPrice || 0;
                                         const unitProfit = item.profit !== undefined ? item.profit : (unitSelling - unitBase) * qty;
+                                        const displaySku = item.sku || item.productCode || 'N/A';
+                                        const vText = item.variantName && item.variantName !== 'Default Title'
+                                            ? item.variantName
+                                            : (item.variantDetails || (item.color ? (item.size ? `${item.color} / ${item.size}` : item.color) : ''));
 
                                         return (
                                             <tr key={idx} style={{ borderTop: '1px solid #e2e8f0', backgroundColor: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
                                                 <td style={{ ...tdStyle, fontWeight: '600', color: '#0f172a' }}>
-                                                    {item.productName || 'Product'}
+                                                    <div>{item.productName || 'Product'}</div>
+                                                    {item.sku && item.productCode && item.sku !== item.productCode && (
+                                                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '400', marginTop: '2px' }}>
+                                                            Base Code: {item.productCode}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td style={tdStyle}>
                                                     <span style={{
@@ -1812,20 +1846,21 @@ export default function TenantOrders({ tenantId, isAdmin = false, tenants = [] }
                                                         color: '#475569',
                                                         fontFamily: 'monospace'
                                                     }}>
-                                                        {item.productCode || 'N/A'}
+                                                        {displaySku}
                                                     </span>
                                                 </td>
                                                 <td style={tdStyle}>
-                                                    {item.variantName && item.variantName !== 'Default Title' ? (
+                                                    {vText && vText !== 'Default Title' ? (
                                                         <span style={{
                                                             padding: '2px 8px',
                                                             borderRadius: '6px',
                                                             backgroundColor: '#ede9fe',
                                                             color: '#6d28d9',
                                                             fontSize: '12px',
-                                                            fontWeight: '600'
+                                                            fontWeight: '600',
+                                                            display: 'inline-block'
                                                         }}>
-                                                            {item.variantName}
+                                                            {vText}
                                                         </span>
                                                     ) : (
                                                         <span style={{ color: '#94a3b8', fontSize: '13px' }}>Standard</span>
@@ -2354,19 +2389,25 @@ export default function TenantOrders({ tenantId, isAdmin = false, tenants = [] }
                                         {/* Products List */}
                                         <td style={tdStyle}>
                                             {order.items && order.items.length > 0 ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11.5px', lineHeight: '1.3' }}>
-                                                    {order.items.slice(0, 2).map((item, idx) => (
-                                                        <div key={idx} style={{ wordBreak: 'break-word', color: '#334155' }}>
-                                                            <strong style={{ color: '#0f172a', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '1px 4px', borderRadius: '3px' }}>
-                                                                {item.productCode || 'ITEM'}
-                                                            </strong>{' '}
-                                                            - {item.productName}
-                                                            {item.variantName && item.variantName !== 'Default Title' ? (
-                                                                <span style={{ color: '#64748b', fontSize: '10.5px' }}> ({item.variantName})</span>
-                                                            ) : null}
-                                                            <span style={{ color: '#0f172a', fontWeight: '700' }}> ×{item.quantity || 1}</span>
-                                                        </div>
-                                                    ))}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px', lineHeight: '1.3' }}>
+                                                    {order.items.slice(0, 2).map((item, idx) => {
+                                                        const displaySku = item.sku || item.productCode || 'ITEM';
+                                                        const vText = item.variantName && item.variantName !== 'Default Title'
+                                                            ? item.variantName
+                                                            : (item.variantDetails || (item.color ? (item.size ? `${item.color} / ${item.size}` : item.color) : ''));
+                                                        return (
+                                                            <div key={idx} style={{ wordBreak: 'break-word', color: '#334155' }}>
+                                                                <strong style={{ color: '#0f172a', fontFamily: 'monospace', backgroundColor: '#f1f5f9', padding: '1px 4px', borderRadius: '3px' }}>
+                                                                    {displaySku}
+                                                                </strong>{' '}
+                                                                - {item.productName || 'Product'}
+                                                                {vText && vText !== 'Default Title' ? (
+                                                                    <span style={{ color: '#6d28d9', fontWeight: '600', fontSize: '10.5px' }}> ({vText})</span>
+                                                                ) : null}
+                                                                <span style={{ color: '#0f172a', fontWeight: '700' }}> ×{item.quantity || 1}</span>
+                                                            </div>
+                                                        );
+                                                    })}
                                                     {order.items.length > 2 && (
                                                         <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: '600', backgroundColor: '#eff6ff', padding: '1px 6px', borderRadius: '10px', width: 'fit-content' }}>
                                                             +{order.items.length - 2} more item{order.items.length - 2 > 1 ? 's' : ''}

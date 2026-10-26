@@ -858,6 +858,57 @@ public void activateInventoryAtLocation(String inventoryItemId, String locationI
         throw new ShopifyDuplicateConflictException(null, targetId, verifiedIds);
     }
 
+    public Map<String, String> getFirebaseProductDetailsFromShopify(String shopifyProductId) {
+        if (shopifyProductId == null || shopifyProductId.trim().isEmpty()) return null;
+        String fullId = shopifyProductId.startsWith("gid://") ? shopifyProductId : "gid://shopify/Product/" + shopifyProductId;
+        String query = "query getMeta($id: ID!) { product(id: $id) { " +
+                "id title tags " +
+                "metafields(first: 10, namespace: \"kiyuziyu\") { edges { node { key value } } } " +
+                "} }";
+        try {
+            Map<String, Object> data = executeQuery(query, Map.of("id", fullId));
+            if (data != null && data.containsKey("product")) {
+                Map<String, Object> product = (Map<String, Object>) data.get("product");
+                if (product != null) {
+                    Map<String, String> result = new HashMap<>();
+                    result.put("title", (String) product.get("title"));
+
+                    Map<String, Object> mfs = (Map<String, Object>) product.get("metafields");
+                    if (mfs != null && mfs.containsKey("edges")) {
+                        List<Map<String, Object>> edges = (List<Map<String, Object>>) mfs.get("edges");
+                        if (edges != null) {
+                            for (Map<String, Object> edge : edges) {
+                                Map<String, Object> node = (Map<String, Object>) edge.get("node");
+                                if (node != null) {
+                                    String k = (String) node.get("key");
+                                    String v = (String) node.get("value");
+                                    if ("product_id".equals(k)) result.put("productId", v != null ? v.trim() : null);
+                                    if ("product_code".equals(k)) result.put("productCode", v != null ? v.trim() : null);
+                                }
+                            }
+                        }
+                    }
+
+                    List<String> tags = (List<String>) product.get("tags");
+                    if (tags != null) {
+                        for (String tag : tags) {
+                            if (tag.startsWith("kiyuziyu_id_") && !result.containsKey("productId")) {
+                                result.put("productId", tag.substring("kiyuziyu_id_".length()).trim());
+                            }
+                            if (tag.startsWith("kiyuziyu_code_") && !result.containsKey("productCode")) {
+                                result.put("productCode", tag.substring("kiyuziyu_code_".length()).trim());
+                            }
+                        }
+                    }
+                    return result;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[Shopify] Failed to get product details from Shopify for {}: {}", shopifyProductId, e.getMessage());
+        }
+        return null;
+    }
+
     public Map<String, String> createProduct(
             String title,
             String descriptionHtml,

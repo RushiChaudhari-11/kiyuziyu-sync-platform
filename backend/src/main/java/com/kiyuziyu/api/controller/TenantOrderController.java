@@ -88,6 +88,9 @@ public class TenantOrderController {
                         qty = ((Number) item.get("quantity")).intValue();
                     }
 
+                    String sku = item.get("sku") != null ? String.valueOf(item.get("sku")).trim() : null;
+                    String variantId = item.get("variantId") != null ? String.valueOf(item.get("variantId")).trim() : null;
+
                     // Find product
                     Product p = null;
                     if (collectionId != null && subcollectionId != null && productId != null) {
@@ -116,26 +119,68 @@ public class TenantOrderController {
                                 @SuppressWarnings("unchecked")
                                 List<Map<String, Object>> variations = (List<Map<String, Object>>) pData.get("variations");
                                 List<Map<String, Object>> newVariations = new ArrayList<>();
-                                for (Map<String, Object> v : variations) {
-                                    Map<String, Object> vCopy = new HashMap<>(v);
-                                    String vColor = vCopy.get("color") != null ? String.valueOf(vCopy.get("color")) : "";
-                                    String vName = vCopy.get("name") != null ? String.valueOf(vCopy.get("name")) : "";
-                                    String vVariantName = vCopy.get("variantName") != null ? String.valueOf(vCopy.get("variantName")) : "";
+                                
+                                int targetIdx = -1;
+                                if (sku != null && sku.contains("-")) {
+                                    try {
+                                        int parsedIdx = Integer.parseInt(sku.substring(sku.lastIndexOf('-') + 1).trim()) - 1;
+                                        if (parsedIdx >= 0 && parsedIdx < variations.size()) {
+                                            targetIdx = parsedIdx;
+                                        }
+                                    } catch (Exception ignored) {}
+                                }
 
-                                    if (variantName != null && (variantName.equalsIgnoreCase(vColor) || variantName.equalsIgnoreCase(vName) || variantName.equalsIgnoreCase(vVariantName))) {
-                                        int curQ = 0;
-                                        if (vCopy.get("quantity") instanceof Number) curQ = ((Number) vCopy.get("quantity")).intValue();
-                                        else if (vCopy.get("initialQuantity") instanceof Number) curQ = ((Number) vCopy.get("initialQuantity")).intValue();
+                                int totalVarStock = 0;
+                                for (int i = 0; i < variations.size(); i++) {
+                                    Map<String, Object> v = variations.get(i);
+                                    Map<String, Object> vCopy = new HashMap<>(v);
+                                    String vColor = vCopy.get("color") != null ? String.valueOf(vCopy.get("color")).trim() : "";
+                                    String vName = vCopy.get("name") != null ? String.valueOf(vCopy.get("name")).trim() : "";
+                                    String vVariantName = vCopy.get("variantName") != null ? String.valueOf(vCopy.get("variantName")).trim() : "";
+                                    String vTitle = vCopy.get("title") != null ? String.valueOf(vCopy.get("title")).trim() : "";
+                                    String vSize = vCopy.get("size") != null ? String.valueOf(vCopy.get("size")).trim() : "";
+                                    String vSku = vCopy.get("sku") != null ? String.valueOf(vCopy.get("sku")).trim() : "";
+                                    String vVarId = vCopy.get("variantId") != null ? String.valueOf(vCopy.get("variantId")).trim() : (vCopy.get("shopifyVariantId") != null ? String.valueOf(vCopy.get("shopifyVariantId")).trim() : "");
+
+                                    boolean isMatch = false;
+                                    if (targetIdx == i) {
+                                        isMatch = true;
+                                    } else if (variantId != null && !variantId.isEmpty() && !vVarId.isEmpty() && variantId.equalsIgnoreCase(vVarId)) {
+                                        isMatch = true;
+                                    } else if (sku != null && !sku.isEmpty() && !vSku.isEmpty() && sku.equalsIgnoreCase(vSku)) {
+                                        isMatch = true;
+                                    } else if (variantName != null && !variantName.isEmpty()) {
+                                        String vn = variantName.trim();
+                                        if (vn.equalsIgnoreCase(vColor) ||
+                                            vn.equalsIgnoreCase(vName) ||
+                                            vn.equalsIgnoreCase(vVariantName) ||
+                                            vn.equalsIgnoreCase(vTitle) ||
+                                            vn.equalsIgnoreCase(vSize) ||
+                                            (!vSize.isEmpty() && (vn.toLowerCase().contains(vSize.toLowerCase()) || vSize.toLowerCase().contains(vn.toLowerCase()))) ||
+                                            (!vColor.isEmpty() && (vn.toLowerCase().contains(vColor.toLowerCase()) || vColor.toLowerCase().contains(vn.toLowerCase())))) {
+                                            isMatch = true;
+                                        }
+                                    }
+
+                                    int curQ = 0;
+                                    if (vCopy.get("quantity") instanceof Number) curQ = ((Number) vCopy.get("quantity")).intValue();
+                                    else if (vCopy.get("initialQuantity") instanceof Number) curQ = ((Number) vCopy.get("initialQuantity")).intValue();
+
+                                    if (isMatch && !updated) {
                                         int newQ = curQ + qty;
                                         vCopy.put("quantity", newQ);
                                         updated = true;
                                         unitsRestored += qty;
-                                        log.info("[CancelOrder] Restored variant {} stock {} -> {}", variantName, curQ, newQ);
+                                        totalVarStock += newQ;
+                                        log.info("[CancelOrder] Restored variant {} stock {} -> {}", (variantName != null ? variantName : "idx=" + i), curQ, newQ);
+                                    } else {
+                                        totalVarStock += curQ;
                                     }
                                     newVariations.add(vCopy);
                                 }
                                 if (updated) {
                                     updates.put("variations", newVariations);
+                                    updates.put("quantity", totalVarStock);
                                 }
                             }
 
@@ -207,6 +252,59 @@ public class TenantOrderController {
         }
     }
 
+    @GetMapping
+    public ResponseEntity<Map<String, Object>> getTenantOrders(
+            @RequestParam(value = "tenantId", required = false) String tenantId) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            List<com.kiyuziyu.api.model.TenantOrder> orders;
+            if (tenantId != null && !tenantId.trim().isEmpty()) {
+                orders = tenantOrderRepository.findByTenantId(tenantId.trim());
+            } else {
+                orders = new ArrayList<>();
+                com.google.cloud.firestore.QuerySnapshot snap = firestore.collection(com.kiyuziyu.api.repository.TenantOrderRepository.COLLECTION_NAME).get().get();
+                for (com.google.cloud.firestore.QueryDocumentSnapshot doc : snap.getDocuments()) {
+                    com.kiyuziyu.api.model.TenantOrder o = doc.toObject(com.kiyuziyu.api.model.TenantOrder.class);
+                    if (o != null) {
+                        if (o.getOrderId() == null) o.setOrderId(doc.getId());
+                        orders.add(o);
+                    }
+                }
+            }
+            response.put("success", true);
+            response.put("orders", orders);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to get tenant orders: {}", e.getMessage(), e);
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(500).body(response);
+        }
+    }
+
+    @GetMapping("/{orderId}")
+    public ResponseEntity<Map<String, Object>> getTenantOrderById(@PathVariable String orderId) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            DocumentSnapshot doc = firestore.collection(com.kiyuziyu.api.repository.TenantOrderRepository.COLLECTION_NAME).document(orderId.trim()).get().get();
+            if (!doc.exists()) {
+                response.put("success", false);
+                response.put("message", "Order not found");
+                return ResponseEntity.status(404).body(response);
+            }
+            com.kiyuziyu.api.model.TenantOrder o = doc.toObject(com.kiyuziyu.api.model.TenantOrder.class);
+            if (o != null && o.getOrderId() == null) o.setOrderId(doc.getId());
+            response.put("success", true);
+            response.put("order", o);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to get order {}: {}", orderId, e.getMessage(), e);
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(500).body(response);
+        }
+    }
+
     @PostMapping("/reconcile-shopify-orders")
     public ResponseEntity<Map<String, Object>> reconcileShopifyOrders(
             @RequestParam(value = "shop", required = false) String shopDomain) {
@@ -232,11 +330,7 @@ public class TenantOrderController {
                 String name = (String) node.get("name");
                 String orderNumber = name != null ? name.replace("#", "").trim() : numericId;
 
-                if (tenantOrderRepository.existsByShopifyOrderId(tenantId, numericId)
-                        || tenantOrderRepository.existsByShopifyOrderId("g0usC1NMyehaoSKJRhOqUUhZAO62", numericId)) {
-                    skipped.add(orderNumber);
-                    continue;
-                }
+
 
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("id", numericId);
@@ -280,8 +374,17 @@ public class TenantOrderController {
                                 if (liNode.get("variant") instanceof Map) {
                                     Map<String, Object> vNode = (Map<String, Object>) liNode.get("variant");
                                     item.put("variant_title", vNode.get("title"));
+                                    if (vNode.get("id") != null) {
+                                        item.put("variant_id", String.valueOf(vNode.get("id")).replaceAll("\\D+", ""));
+                                    }
                                     if (item.get("sku") == null || ((String) item.get("sku")).trim().isEmpty()) {
                                         item.put("sku", vNode.get("sku"));
+                                    }
+                                }
+                                if (liNode.get("product") instanceof Map) {
+                                    Map<String, Object> pNode = (Map<String, Object>) liNode.get("product");
+                                    if (pNode != null && pNode.get("id") != null) {
+                                        item.put("product_id", String.valueOf(pNode.get("id")).replaceAll("\\D+", ""));
                                     }
                                 }
                                 lineItemsList.add(item);

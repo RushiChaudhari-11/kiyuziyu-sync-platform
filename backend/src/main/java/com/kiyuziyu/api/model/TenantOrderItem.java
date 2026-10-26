@@ -13,6 +13,8 @@ public class TenantOrderItem {
     private Double adminProfit;
     private String collectionId;
     private String subcollectionId;
+    private String sku;
+    private String variantId;
 
     public TenantOrderItem() {}
 
@@ -27,6 +29,12 @@ public class TenantOrderItem {
 
     public String getVariantName() { return variantName; }
     public void setVariantName(String variantName) { this.variantName = variantName; }
+
+    public String getSku() { return sku; }
+    public void setSku(String sku) { this.sku = sku; }
+
+    public String getVariantId() { return variantId; }
+    public void setVariantId(String variantId) { this.variantId = variantId; }
 
     public Integer getQuantity() { return quantity; }
     public void setQuantity(Integer quantity) { this.quantity = quantity; }

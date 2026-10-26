@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
-import { getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
+import { getUserSession, adminSignOut, getIdToken, API_BASE, apiFetch } from './adminAuth';
 import LogoImage from '../../assets/logoj2.png';
 import TenantOrders from './TenantOrders';
 import TenantAnalysisReports from './TenantAnalysisReports';
@@ -48,7 +48,7 @@ export default function TenantDashboard({ initialTab = 'dashboard' }) {
 
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         headers: { 
           'Authorization': `Bearer ${token}`
         },
@@ -252,7 +252,7 @@ export default function TenantDashboard({ initialTab = 'dashboard' }) {
       setShopifySuccess('');
       const token = await getIdToken();
       const origin = window.location.origin;
-      const res = await fetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${encodeURIComponent(validation.domain)}&origin=${encodeURIComponent(origin)}`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${encodeURIComponent(validation.domain)}&origin=${encodeURIComponent(origin)}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -287,7 +287,7 @@ export default function TenantDashboard({ initialTab = 'dashboard' }) {
 
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

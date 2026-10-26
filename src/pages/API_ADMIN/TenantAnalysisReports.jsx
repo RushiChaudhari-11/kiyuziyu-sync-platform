@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getIdToken, API_BASE } from './adminAuth';
+import { getIdToken, API_BASE, apiFetch } from './adminAuth';
 import { db } from '../../firebase';
 import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import {
@@ -349,7 +349,7 @@ export default function TenantAnalysisReports({ tenantId, tenantProfile }) {
       if (endDateStr) params.append('endDate', endDateStr);
 
       const url = `${API_BASE}/api/v1/tenants/me/reports/analysis${params.toString() ? '?' + params.toString() : ''}`;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         headers: {
           Authorization: `Bearer ${token}`
         }

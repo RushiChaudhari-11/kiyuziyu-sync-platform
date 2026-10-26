@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, onSnapshot } from 'firebase/firestore';
-import { getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
+import { getUserSession, adminSignOut, getIdToken, API_BASE, apiFetch } from './adminAuth';
 import LogoImage from '../../assets/logoj2.png';
 import TenantOrders from './TenantOrders';
 import AdminAnalysisReports from './AdminAnalysisReports';
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
       // 2. Also query backend API if token is valid
       try {
         const token = await getIdToken();
-        const res = await fetch(`${API_BASE}/api/v1/admin/tenants`, {
+        const res = await apiFetch(`${API_BASE}/api/v1/admin/tenants`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -332,7 +332,7 @@ export default function AdminDashboard() {
     setIsSubmitting(true);
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/admin/tenants`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/admin/tenants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
