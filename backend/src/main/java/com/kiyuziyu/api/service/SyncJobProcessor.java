@@ -42,6 +42,12 @@ public class SyncJobProcessor {
     @Autowired
     private Firestore firestore;
 
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private SyncJobProcessor self;
+
+    private final java.util.Set<String> inFlightJobIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     @PostConstruct
     public void initJobListener() {
         log.info("[SyncJobProcessor] Initializing Firestore listener for QUEUED apiSyncJobs...");
@@ -55,10 +61,42 @@ public class SyncJobProcessor {
                     if (snapshots != null) {
                         for (DocumentChange dc : snapshots.getDocumentChanges()) {
                             if (dc.getType() == DocumentChange.Type.ADDED) {
-                                SyncJob job = dc.getDocument().toObject(SyncJob.class);
-                                if (SyncJobStatus.QUEUED.name().equals(job.getStatus())) {
-                                    log.info("[SyncJobProcessor] Picked up new QUEUED job from Firestore: {}", job.getJobId());
-                                    processJobAsync(job.getJobId(), job.getTenantId(), job.getStoreId(), job.getConnectionId(), job.getProductIds());
+                                SyncJob job = null;
+                                try {
+                                    job = dc.getDocument().toObject(SyncJob.class);
+                                    if (job != null && job.getJobId() == null) {
+                                        job.setJobId(dc.getDocument().getId());
+                                    }
+                                } catch (Exception parseEx) {
+                                    log.warn("[SyncJobProcessor] Failed to deserialize job document {}: {}", dc.getDocument().getId(), parseEx.getMessage());
+                                    continue;
+                                }
+                                if (job != null && SyncJobStatus.QUEUED.name().equals(job.getStatus())) {
+                                    String jobId = job.getJobId();
+                                    if (jobId != null) {
+                                        if (!inFlightJobIds.add(jobId)) {
+                                            log.info("[SyncJobProcessor] Job {} is already being dispatched/processed locally. Skipping duplicate event.", jobId);
+                                            continue;
+                                        }
+                                        // Claim the job atomically in the listener thread before dispatching.
+                                        // This prevents a race where two listener events both pass inFlightJobIds
+                                        // and then one claims RUNNING before the other async worker runs.
+                                        SyncJob claimedJob;
+                                        try {
+                                            claimedJob = syncJobRepository.claimJobForProcessing(jobId);
+                                        } catch (Exception claimEx) {
+                                            log.error("[SyncJobProcessor] Failed to claim job {}: {}", jobId, claimEx.getMessage());
+                                            inFlightJobIds.remove(jobId);
+                                            continue;
+                                        }
+                                        if (claimedJob == null) {
+                                            log.info("[SyncJobProcessor] Job {} could not be claimed (already RUNNING or not QUEUED). Skipping.", jobId);
+                                            inFlightJobIds.remove(jobId);
+                                            continue;
+                                        }
+                                        log.info("[SyncJobProcessor] Claimed and dispatching job from Firestore: {}", jobId);
+                                        self.processJobAsync(claimedJob);
+                                    }
                                 }
                             }
                         }
@@ -67,18 +105,18 @@ public class SyncJobProcessor {
     }
 
     @Async("syncJobTaskExecutor")
-    public CompletableFuture<Void> processJobAsync(String jobId, String tenantId, String storeId, String connectionId, List<String> productIds) {
+    public CompletableFuture<Void> processJobAsync(SyncJob claimedJob) {
+        String jobId = claimedJob != null ? claimedJob.getJobId() : null;
+        String tenantId = claimedJob != null ? claimedJob.getTenantId() : null;
+        String storeId = claimedJob != null ? claimedJob.getStoreId() : null;
+        String connectionId = claimedJob != null ? claimedJob.getConnectionId() : null;
+        List<String> productIds = claimedJob != null ? claimedJob.getProductIds() : null;
+
         log.info("[SyncJobProcessor] START background execution for jobId={}, tenantId={}, storeId={}, totalItems={}",
                 jobId, tenantId, storeId, productIds != null ? productIds.size() : 0);
 
-        SyncJob job = null;
+        SyncJob job = claimedJob;
         try {
-            // 1. Transition QUEUED -> RUNNING Atomically via Transaction
-            job = syncJobRepository.claimJobForProcessing(jobId);
-            if (job == null) {
-                log.info("[SyncJobProcessor] Job {} is already claimed by another process or not QUEUED. Skipping.", jobId);
-                return CompletableFuture.completedFuture(null);
-            }
 
             int successCount = 0;
             int failedCount = 0;
@@ -211,6 +249,9 @@ public class SyncJobProcessor {
                 log.error("[SyncJobProcessor] Failed to persist fatal job failure for {}: {}", jobId, saveErr.getMessage(), saveErr);
             }
         } finally {
+            if (jobId != null) {
+                inFlightJobIds.remove(jobId);
+            }
             com.kiyuziyu.api.integration.shopify.ShopifyContextHolder.clearContext();
         }
 

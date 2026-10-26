@@ -609,7 +609,7 @@ class ShopifyProductServiceTest {
 
         verify(shopifyGraphQLClient, times(1)).updateProduct(
                 eq("gid://shopify/Product/reconcile_999"),
-                eq("Reconcile Watch"),
+                eq("Reconcile Watch - Rose Gold"),
                 eq("<p>Luxury reconcile description</p>"),
                 eq("706"),
                 eq("doc_reconcile"),
@@ -656,5 +656,147 @@ class ShopifyProductServiceTest {
                 eq("gid://shopify/Product/idemp_1"),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 23: Two products sharing productCode (5971) sync as separate products
+    // with correct variant names, titles, and respective stock quantities (7 and 6)
+    // -----------------------------------------------------------------------
+    @Test
+    void testSyncDistinctProductsWithSameProductCode_WhiteAndGreenVariants() throws Exception {
+        // Product 1: White variant, stock 7
+        Product whiteProduct = new Product();
+        whiteProduct.setId("AfePzV9eFdHkSODKx8IY");
+        whiteProduct.setProductCode("5971");
+        whiteProduct.setProductName("M earring ");
+        whiteProduct.setBasePrice(195.0);
+        whiteProduct.setImage("http://img.com/white.png");
+        whiteProduct.setVariations(List.of(Map.of("color", "white ", "quantity", 7, "initialQuantity", 10)));
+
+        // Product 2: Green variant, stock 6
+        Product greenProduct = new Product();
+        greenProduct.setId("BNjuh2Wf3oIUOhcW2zp5");
+        greenProduct.setProductCode("5971");
+        greenProduct.setProductName("M earring ");
+        greenProduct.setBasePrice(195.0);
+        greenProduct.setImage("http://img.com/green.png");
+        greenProduct.setVariations(List.of(Map.of("color", "Green ", "quantity", 6, "initialQuantity", 6)));
+
+        when(shopifyGraphQLClient.findProductIdByFirebaseId("AfePzV9eFdHkSODKx8IY")).thenReturn(null);
+        when(shopifyGraphQLClient.findProductIdByFirebaseId("BNjuh2Wf3oIUOhcW2zp5")).thenReturn(null);
+
+        when(shopifyGraphQLClient.createProduct(
+                eq("M earring - White"), any(), eq("5971"), eq("AfePzV9eFdHkSODKx8IY"),
+                any(), any(), eq("http://img.com/white.png"), any(), any(), any(),
+                eq(whiteProduct.getVariations()), any(), eq(7)
+        )).thenReturn(Map.of("productId", "gid://shopify/Product/white_101", "variantId", "gid://shopify/ProductVariant/white_v1"));
+
+        when(shopifyGraphQLClient.createProduct(
+                eq("M earring - Green"), any(), eq("5971"), eq("BNjuh2Wf3oIUOhcW2zp5"),
+                any(), any(), eq("http://img.com/green.png"), any(), any(), any(),
+                eq(greenProduct.getVariations()), any(), eq(6)
+        )).thenReturn(Map.of("productId", "gid://shopify/Product/green_102", "variantId", "gid://shopify/ProductVariant/green_v2"));
+
+        // Sync White product
+        ShopifyProductSyncResponse respWhite = shopifyProductService.syncProduct("client_1", whiteProduct);
+        assertTrue(respWhite.isSuccess());
+        assertEquals("gid://shopify/Product/white_101", respWhite.getData().get("shopifyProductId"));
+
+        // Sync Green product
+        ShopifyProductSyncResponse respGreen = shopifyProductService.syncProduct("client_1", greenProduct);
+        assertTrue(respGreen.isSuccess());
+        assertEquals("gid://shopify/Product/green_102", respGreen.getData().get("shopifyProductId"));
+
+        // Verify White creation: title "M earring - White", stock 7, image white.png
+        verify(shopifyGraphQLClient, times(1)).createProduct(
+                eq("M earring - White"), any(), eq("5971"), eq("AfePzV9eFdHkSODKx8IY"),
+                any(), any(), eq("http://img.com/white.png"), any(), any(), any(),
+                eq(whiteProduct.getVariations()), any(), eq(7)
+        );
+
+        // Verify Green creation: title "M earring - Green", stock 6, image green.png
+        verify(shopifyGraphQLClient, times(1)).createProduct(
+                eq("M earring - Green"), any(), eq("5971"), eq("BNjuh2Wf3oIUOhcW2zp5"),
+                any(), any(), eq("http://img.com/green.png"), any(), any(), any(),
+                eq(greenProduct.getVariations()), any(), eq(6)
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 24: Repeated sync of existing document updates Shopify product, no duplicate
+    // -----------------------------------------------------------------------
+    @Test
+    void testRepeatedSyncUpdatesExistingProductWithoutDuplicates() throws Exception {
+        Product greenProduct = new Product();
+        greenProduct.setId("BNjuh2Wf3oIUOhcW2zp5");
+        greenProduct.setProductCode("5971");
+        greenProduct.setProductName("M earring");
+        greenProduct.setBasePrice(195.0);
+        greenProduct.setImage("http://img.com/green.png");
+        greenProduct.setVariations(List.of(Map.of("color", "Green", "quantity", 6)));
+
+        // Existing product found in Shopify
+        when(shopifyGraphQLClient.findProductIdByFirebaseId("BNjuh2Wf3oIUOhcW2zp5"))
+                .thenReturn("gid://shopify/Product/green_102");
+
+        ShopifyProductSyncResponse resp = shopifyProductService.syncProduct("client_1", greenProduct);
+
+        assertTrue(resp.isSuccess());
+        assertTrue(resp.isAlreadyExists());
+        assertEquals("gid://shopify/Product/green_102", resp.getData().get("shopifyProductId"));
+
+        verify(shopifyGraphQLClient, never()).createProduct(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(shopifyGraphQLClient, times(1)).updateProduct(
+                eq("gid://shopify/Product/green_102"),
+                eq("M earring - Green"),
+                any(),
+                eq("5971"),
+                eq("BNjuh2Wf3oIUOhcW2zp5"),
+                any(), any(),
+                eq("http://img.com/green.png"),
+                any(), any(), any(),
+                eq(greenProduct.getVariations()),
+                any(),
+                eq(6)
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 25: resolveProductTitle correctly handles various product shapes
+    // -----------------------------------------------------------------------
+    @Test
+    void testResolveProductTitle_Shapes() {
+        // Single variation with color
+        Product p1 = new Product();
+        p1.setProductName("M earring");
+        p1.setVariations(List.of(Map.of("color", "white", "quantity", 7)));
+        assertEquals("M earring - White", ShopifyProductService.resolveProductTitle(p1));
+
+        // Single variation with green
+        Product p2 = new Product();
+        p2.setProductName("M earring");
+        p2.setVariations(List.of(Map.of("color", "Green", "quantity", 6)));
+        assertEquals("M earring - Green", ShopifyProductService.resolveProductTitle(p2));
+
+        // Multi variation preserves base name
+        Product p3 = new Product();
+        p3.setProductName("PRIDE EARINGS ROSEGOLD");
+        p3.setVariations(List.of(
+                Map.of("color", "Gold", "quantity", 5),
+                Map.of("color", "Silver", "quantity", 5)
+        ));
+        assertEquals("PRIDE EARINGS ROSEGOLD", ShopifyProductService.resolveProductTitle(p3));
+
+        // No variations preserves base name
+        Product p4 = new Product();
+        p4.setProductName("m earrings");
+        p4.setVariations(List.of());
+        assertEquals("m earrings", ShopifyProductService.resolveProductTitle(p4));
+
+        // Title already containing variant doesn't duplicate
+        Product p5 = new Product();
+        p5.setProductName("M earring White");
+        p5.setVariations(List.of(Map.of("color", "White", "quantity", 7)));
+        assertEquals("M earring White", ShopifyProductService.resolveProductTitle(p5));
     }
 }

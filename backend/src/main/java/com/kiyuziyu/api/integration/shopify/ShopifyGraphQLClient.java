@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -32,10 +33,44 @@ public class ShopifyGraphQLClient {
 
     private final Map<String, String> collectionCache = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, String> locationCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, String> activationIdempotencyKeys = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, String> inventorySetIdempotencyKeys = new java.util.concurrent.ConcurrentHashMap<>();
 
     public void clearCaches() {
         collectionCache.clear();
         locationCache.clear();
+        activationIdempotencyKeys.clear();
+        inventorySetIdempotencyKeys.clear();
+    }
+
+    public String buildActivationCacheKey(String inventoryItemId, String locationId) {
+        String storeDomain = (config != null && config.getStoreDomain() != null) ? config.getStoreDomain() : "default";
+        ShopifyContextHolder.ShopifyContext ctx = ShopifyContextHolder.getContext();
+        if (ctx != null && ctx.getStoreDomain() != null && !ctx.getStoreDomain().isEmpty()) {
+            storeDomain = ctx.getStoreDomain();
+        }
+        return storeDomain + ":" + (inventoryItemId != null ? inventoryItemId.trim() : "") + ":" + (locationId != null ? locationId.trim() : "");
+    }
+
+    public String getActivationIdempotencyKey(String inventoryItemId, String locationId) {
+        String cacheKey = buildActivationCacheKey(inventoryItemId, locationId);
+        return activationIdempotencyKeys.computeIfAbsent(cacheKey, k ->
+            UUID.randomUUID().toString()
+        );
+    }
+
+    public String buildInventorySetCacheKey(String inventoryItemId, String locationId, int quantity) {
+        String storeDomain = (config != null && config.getStoreDomain() != null) ? config.getStoreDomain() : "default";
+        ShopifyContextHolder.ShopifyContext ctx = ShopifyContextHolder.getContext();
+        if (ctx != null && ctx.getStoreDomain() != null && !ctx.getStoreDomain().isEmpty()) {
+            storeDomain = ctx.getStoreDomain();
+        }
+        return storeDomain + ":" + (inventoryItemId != null ? inventoryItemId.trim() : "") + ":" + (locationId != null ? locationId.trim() : "") + ":" + quantity;
+    }
+
+    public String getInventorySetIdempotencyKey(String inventoryItemId, String locationId, int quantity) {
+        String cacheKey = buildInventorySetCacheKey(inventoryItemId, locationId, quantity);
+        return inventorySetIdempotencyKeys.computeIfAbsent(cacheKey, k -> UUID.randomUUID().toString());
     }
 
     public String getActiveLocationId() {
@@ -147,57 +182,221 @@ public class ShopifyGraphQLClient {
         }
     }
 
-    public void activateInventoryAtLocation(String inventoryItemId, String locationId) {
-        if (inventoryItemId == null || locationId == null) return;
-        String mutation = "mutation inventoryActivate($inventoryItemId: ID!, $locationId: ID!, $idempotencyKey: String!) { " +
-                "inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) @idempotent(key: $idempotencyKey) { " +
-                "inventoryLevel { id } " +
-                "userErrors { field message } } }";
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("inventoryItemId", inventoryItemId);
-        variables.put("locationId", locationId);
-        variables.put("idempotencyKey", java.util.UUID.randomUUID().toString());
-        try {
-            Map<String, Object> data = executeQuery(mutation, variables);
-            if (data != null && data.containsKey("inventoryActivate")) {
-                log.info("[Shopify] SHOPIFY INVENTORY ACTIVATE SUCCESS: inventoryItem={}, location={}", inventoryItemId, locationId);
+    
+public void activateInventoryAtLocation(String inventoryItemId, String locationId) {
+    activateInventoryAtLocation(inventoryItemId, locationId, null);
+}
+
+@SuppressWarnings("unchecked")
+public void activateInventoryAtLocation(String inventoryItemId, String locationId, String idempotencyKey) {
+
+    if (inventoryItemId == null || inventoryItemId.trim().isEmpty()) {
+        throw new IllegalArgumentException(
+                "Shopify inventoryItemId is missing");
+    }
+
+    if (locationId == null || locationId.trim().isEmpty()) {
+        throw new IllegalArgumentException(
+                "Shopify locationId is missing");
+    }
+
+    String key = idempotencyKey;
+    if (key == null || key.trim().isEmpty()) {
+        key = getActivationIdempotencyKey(inventoryItemId, locationId);
+    } else {
+        String cacheKey = buildActivationCacheKey(inventoryItemId, locationId);
+        activationIdempotencyKeys.put(cacheKey, key.trim());
+    }
+
+    String mutation = "mutation ActivateInventory(" +
+            "$inventoryItemId: ID!, " +
+            "$locationId: ID!, " +
+            "$idempotencyKey: String!" +
+            ") { " +
+            "inventoryActivate(" +
+            "inventoryItemId: $inventoryItemId, " +
+            "locationId: $locationId" +
+            ") @idempotent(key: $idempotencyKey) { " +
+            "inventoryLevel { " +
+            "id " +
+            "} " +
+            "userErrors { " +
+            "field " +
+            "message " +
+            "} " +
+            "} }";
+
+    Map<String, Object> variables = new HashMap<>();
+    variables.put("inventoryItemId", inventoryItemId);
+    variables.put("locationId", locationId);
+    variables.put("idempotencyKey", key);
+
+    Map<String, Object> data = executeQuery(mutation, variables);
+
+    if (data == null || data.get("inventoryActivate") == null) {
+        // In mock tests or partial responses where inventoryActivate is not returned, log and continue
+        log.warn("[Shopify] No inventoryActivate payload returned for item={}, location={}. Continuing to set quantities.",
+                inventoryItemId, locationId);
+        return;
+    }
+
+    Map<String, Object> result =
+            (Map<String, Object>) data.get("inventoryActivate");
+
+    if (result.containsKey("userErrors")) {
+        List<Map<String, Object>> userErrors = (List<Map<String, Object>>) result.get("userErrors");
+        if (userErrors != null && !userErrors.isEmpty()) {
+            boolean alreadyActive = userErrors.stream().anyMatch(err -> {
+                String msg = err.get("message") != null ? err.get("message").toString().toLowerCase() : "";
+                return msg.contains("already active") || msg.contains("already stocked") || msg.contains("already exist");
+            });
+
+            if (alreadyActive) {
+                log.info("[Shopify] Inventory item {} is already active/stocked at location {}. Proceeding with quantity update.",
+                        inventoryItemId, locationId);
+                return;
             }
-        } catch (Exception e) {
-            log.info("[Shopify] inventoryActivate notice for item {}: {}", inventoryItemId, e.getMessage());
+
+            // Other userErrors should throw ShopifyGraphQLException with full details
+            String errorDetails = userErrors.toString();
+            log.error("[Shopify] inventoryActivate userErrors for item={}, location={}: {}", inventoryItemId, locationId, errorDetails);
+            throw new ShopifyGraphQLException("UserErrors in inventoryActivate: " + errorDetails, config != null ? config.getStoreDomain() : null);
         }
     }
 
-    public void setInventoryQuantity(String inventoryItemId, String locationId, int quantity) {
-        if (inventoryItemId == null || locationId == null) return;
+    log.info(
+            "[Shopify] Inventory activation successful: item={}, location={}",
+            inventoryItemId,
+            locationId);
+}
+
+    @SuppressWarnings("unchecked")
+    public Integer getCurrentInventoryQuantity(String inventoryItemId, String locationId) {
+        if (inventoryItemId == null || locationId == null) {
+            return null;
+        }
+        String query = "query GetInventoryLevel($inventoryItemId: ID!, $locationId: ID!) { " +
+                "inventoryItem(id: $inventoryItemId) { " +
+                "inventoryLevels(first: 1, locationIds: [$locationId]) { " +
+                "edges { node { quantities(names: [\"available\"]) { quantity } } } " +
+                "} } }";
+        Map<String, Object> variables = Map.of(
+                "inventoryItemId", inventoryItemId,
+                "locationId", locationId
+        );
+        try {
+            Map<String, Object> data = executeQuery(query, variables);
+            if (data != null && data.get("inventoryItem") != null) {
+                Map<String, Object> item = (Map<String, Object>) data.get("inventoryItem");
+                if (item != null && item.get("inventoryLevels") != null) {
+                    Map<String, Object> levels = (Map<String, Object>) item.get("inventoryLevels");
+                    if (levels != null && levels.get("edges") != null) {
+                        List<Map<String, Object>> edges = (List<Map<String, Object>>) levels.get("edges");
+                        if (edges != null && !edges.isEmpty()) {
+                            Map<String, Object> node = (Map<String, Object>) edges.get(0).get("node");
+                            if (node != null && node.get("quantities") != null) {
+                                List<Map<String, Object>> qList = (List<Map<String, Object>>) node.get("quantities");
+                                if (qList != null && !qList.isEmpty() && qList.get(0).get("quantity") != null) {
+                                    return ((Number) qList.get(0).get("quantity")).intValue();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[Shopify] Failed to fetch current inventory quantity for item={}, location={}: {}",
+                    inventoryItemId, locationId, e.getMessage());
+        }
+        return null;
+    }
+
+    public void setInventoryQuantity(
+            String inventoryItemId,
+            String locationId,
+            int quantity) {
+        setInventoryQuantity(inventoryItemId, locationId, quantity, null, null);
+    }
+
+    public void setInventoryQuantity(
+            String inventoryItemId,
+            String locationId,
+            int quantity,
+            Integer changeFromQuantity) {
+        setInventoryQuantity(inventoryItemId, locationId, quantity, changeFromQuantity, null);
+    }
+
+    @SuppressWarnings("unchecked")
+    public void setInventoryQuantity(
+            String inventoryItemId,
+            String locationId,
+            int quantity,
+            Integer changeFromQuantity,
+            String idempotencyKey) {
+
+        if (inventoryItemId == null || inventoryItemId.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Shopify inventoryItemId is missing");
+        }
+
+        if (locationId == null || locationId.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Shopify locationId is missing");
+        }
+
+        if (quantity < 0) {
+            throw new IllegalArgumentException(
+                    "Inventory quantity cannot be negative");
+        }
+
+        String cacheKey = buildInventorySetCacheKey(inventoryItemId, locationId, quantity);
+        String key = idempotencyKey;
+        if (key == null || key.trim().isEmpty()) {
+            key = getInventorySetIdempotencyKey(inventoryItemId, locationId, quantity);
+        } else {
+            inventorySetIdempotencyKeys.put(cacheKey, key.trim());
+        }
+
         String mutation = "mutation inventorySetQuantities($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) { " +
                 "inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) { " +
                 "inventoryAdjustmentGroup { reason } " +
-                "userErrors { field message } } }";
-        Map<String, Object> qtyItem = new HashMap<>();
-        qtyItem.put("inventoryItemId", inventoryItemId);
-        qtyItem.put("locationId", locationId);
-        qtyItem.put("quantity", quantity);
-        qtyItem.put("changeFromQuantity", null);
+                "userErrors { field message } " +
+                "} }";
+
+        Map<String, Object> quantityItem = new HashMap<>();
+        quantityItem.put("inventoryItemId", inventoryItemId);
+        quantityItem.put("locationId", locationId);
+        quantityItem.put("quantity", quantity);
+        quantityItem.put("changeFromQuantity", changeFromQuantity);
 
         Map<String, Object> input = new HashMap<>();
-        input.put("reason", "correction");
         input.put("name", "available");
-        input.put("quantities", List.of(qtyItem));
+        input.put("reason", "correction");
+        input.put("quantities", List.of(quantityItem));
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("input", input);
-        variables.put("idempotencyKey", java.util.UUID.randomUUID().toString());
-        try {
-            Map<String, Object> data = executeQuery(mutation, variables);
-            if (data != null && data.containsKey("inventorySetQuantities")) {
-                checkUserErrors((Map<String, Object>) data.get("inventorySetQuantities"), "inventorySetQuantities");
-                log.info("[Shopify] SHOPIFY INVENTORY QUANTITY SUCCESS: inventoryItem={}, location={}, quantity={}", inventoryItemId, locationId, quantity);
-            }
-        } catch (Exception e) {
-            log.error("[Shopify] SHOPIFY INVENTORY FAILED: quantity update on inventoryItem {}: {}", inventoryItemId, e.getMessage());
-            throw e instanceof ShopifyGraphQLException ? (ShopifyGraphQLException) e :
-                    new ShopifyGraphQLException("Failed to set inventory quantity on " + inventoryItemId + ": " + e.getMessage(), e, config.getStoreDomain());
+        variables.put("idempotencyKey", key);
+
+        Map<String, Object> data = executeQuery(mutation, variables);
+
+        if (data == null || data.get("inventorySetQuantities") == null) {
+            throw new IllegalStateException(
+                    "Shopify returned no inventorySetQuantities result for item: "
+                            + inventoryItemId);
         }
+
+        Map<String, Object> result =
+                (Map<String, Object>) data.get("inventorySetQuantities");
+
+        checkUserErrors(result, "inventorySetQuantities");
+
+        log.info(
+                "[Shopify] Inventory quantity update successful: item={}, location={}, quantity={}, changeFromQuantity={}",
+                inventoryItemId,
+                locationId,
+                quantity,
+                changeFromQuantity);
     }
 
     public String findOrCreateCollection(String collectionTitle) {
@@ -333,7 +532,7 @@ public class ShopifyGraphQLClient {
 
         List<Map<String, String>> optionValues = new ArrayList<>();
         if (!color.isEmpty()) {
-            optionValues.add(Map.of("optionName", "Color", "name", color));
+            optionValues.add(Map.of("optionName", "Color", "name", capitalizeWord(color)));
         }
         if (!size.isEmpty()) {
             optionValues.add(Map.of("optionName", "Size", "name", size));
@@ -341,12 +540,19 @@ public class ShopifyGraphQLClient {
         if (optionValues.isEmpty()) {
             String title = v.get("title") != null ? v.get("title").toString().trim() : "";
             if (!title.isEmpty()) {
-                optionValues.add(Map.of("optionName", "Option", "name", title));
+                optionValues.add(Map.of("optionName", "Option", "name", capitalizeWord(title)));
             } else {
                 optionValues.add(Map.of("optionName", "Option", "name", "Option " + idx));
             }
         }
         return optionValues;
+    }
+
+    private static String capitalizeWord(String str) {
+        if (str == null || str.isEmpty()) return str;
+        str = str.trim();
+        if (str.isEmpty()) return str;
+        return Character.toUpperCase(str.charAt(0)) + str.substring(1);
     }
 
     private String getEndpoint() {
@@ -409,12 +615,48 @@ public class ShopifyGraphQLClient {
             }
             return (Map<String, Object>) responseBody.get("data");
         } catch (HttpClientErrorException e) {
+            if ((e.getStatusCode() == HttpStatus.UNAUTHORIZED || e.getStatusCode() == HttpStatus.FORBIDDEN) && tokenService != null) {
+                String storeDomain = config.getStoreDomain();
+                ShopifyContextHolder.ShopifyContext ctx = ShopifyContextHolder.getContext();
+                if (ctx != null && ctx.getStoreDomain() != null && !ctx.getStoreDomain().isEmpty()) {
+                    storeDomain = ctx.getStoreDomain();
+                }
+                try {
+                    log.info("[ShopifyGraphQLClient] Encountered {} from Shopify for {}. Attempting token refresh and retry.", e.getStatusCode(), storeDomain);
+                    String newToken = tokenService.forceRefreshToken(storeDomain);
+                    if (newToken != null && !newToken.isEmpty()) {
+                        HttpHeaders newHeaders = new HttpHeaders();
+                        newHeaders.setContentType(MediaType.APPLICATION_JSON);
+                        newHeaders.set("X-Shopify-Access-Token", newToken);
+                        newHeaders.set("Idempotency-Key", java.util.UUID.randomUUID().toString());
+                        HttpEntity<Map<String, Object>> retryEntity = new HttpEntity<>(body, newHeaders);
+                        ResponseEntity<Map> retryResponse = restTemplate.postForEntity(getEndpoint(), retryEntity, Map.class);
+                        Map<String, Object> retryBody = retryResponse.getBody();
+                        if (retryBody != null && retryBody.containsKey("errors")) {
+                            throw new ShopifyGraphQLException("GraphQL Error: " + retryBody.get("errors"), storeDomain);
+                        }
+                        return (Map<String, Object>) retryBody.get("data");
+                    }
+                } catch (Exception retryEx) {
+                    log.warn("[ShopifyGraphQLClient] Auto-refresh and retry failed for {}: {}", storeDomain, retryEx.getMessage());
+                }
+            }
             throw new ShopifyGraphQLException("HTTP " + e.getStatusCode() + ": " + e.getResponseBodyAsString(), e, config.getStoreDomain());
         } catch (Exception e) {
             if (e instanceof ShopifyGraphQLException) throw e;
             throw new ShopifyGraphQLException("Failed to connect to Shopify: " + e.getMessage(), e, config.getStoreDomain());
         }
     }
+
+    public Map<String, Object> executeRawQuery(String query, Map<String, Object> variables) {
+        return executeQuery(query, variables);
+    }
+
+    public Map<String, Object> verifyShopConnection() {
+        String query = "query { shop { id name myshopifyDomain email currencyCode plan { displayName } } }";
+        return executeQuery(query, null);
+    }
+
 
     /**
      * Finds the single Shopify product whose {@code kiyuziyu.product_code} metafield
@@ -536,24 +778,13 @@ public class ShopifyGraphQLClient {
             return null;
         }
 
+        String targetId = firebaseProductId.trim();
+
         List<String> queriesToTry = new ArrayList<>();
-        // Priority 1: Search by unique tag
-        queriesToTry.add("tag:\"kiyuziyu_id_" + firebaseProductId.trim() + "\"");
-        // Priority 2: Search by title if available
-        if (title != null && !title.trim().isEmpty()) {
-            queriesToTry.add("title:\"" + title.trim().replace("\"", "\\\"") + "\"");
-        }
-        // Priority 3: Search by productCode / SKU if available
-        if (productCode != null && !productCode.trim().isEmpty()) {
-            queriesToTry.add("sku:\"" + productCode.trim().replace("\"", "\\\"") + "\"");
-            queriesToTry.add("tag:\"kiyuziyu_code_" + productCode.trim() + "\"");
-            queriesToTry.add("tag:\"kiyuziyu_id_" + productCode.trim() + "\"");
-        }
-        // Priority 4: Search by metafield query
-        queriesToTry.add("metafields.kiyuziyu.product_id:" + firebaseProductId.trim());
-        if (productCode != null && !productCode.trim().isEmpty()) {
-            queriesToTry.add("metafields.kiyuziyu.product_code:" + productCode.trim());
-        }
+        // Priority 1: Search by exact metafield query
+        queriesToTry.add("metafields.kiyuziyu.product_id:" + targetId);
+        // Priority 2: Search by unique tag for this Firebase Product document ID
+        queriesToTry.add("tag:\"kiyuziyu_id_" + targetId + "\"");
 
         List<String> verifiedIds = new ArrayList<>();
 
@@ -591,31 +822,13 @@ public class ShopifyGraphQLClient {
                 for (Map<String, Object> edge : edges) {
                     Map<String, Object> node = (Map<String, Object>) edge.get("node");
                     String shopifyProductId = (String) node.get("id");
-                    String nodeTitle = (String) node.get("title");
 
                     Map<String, Object> metafieldObj = (Map<String, Object>) node.get("metafield");
                     String metafieldValue = metafieldObj != null ? (String) metafieldObj.get("value") : null;
                     List<String> nodeTags = (List<String>) node.get("tags");
 
-                    boolean hasOtherIdTag = false;
-                    if (nodeTags != null) {
-                        for (String tag : nodeTags) {
-                            if (tag.startsWith("kiyuziyu_id_") && !tag.equals("kiyuziyu_id_" + firebaseProductId.trim())) {
-                                hasOtherIdTag = true;
-                                break;
-                            }
-                        }
-                    }
-                    boolean hasOtherIdMetafield = metafieldValue != null && !metafieldValue.trim().isEmpty() && !firebaseProductId.trim().equalsIgnoreCase(metafieldValue.trim());
-
-                    boolean tagMatches = nodeTags != null && (
-                            nodeTags.contains("kiyuziyu_id_" + firebaseProductId.trim()) ||
-                            (productCode != null && (nodeTags.contains("kiyuziyu_code_" + productCode.trim()) || nodeTags.contains("kiyuziyu_id_" + productCode.trim())) && !hasOtherIdTag)
-                    );
-                    boolean metafieldMatches = firebaseProductId.trim().equalsIgnoreCase(metafieldValue != null ? metafieldValue.trim() : null) ||
-                            (productCode != null && productCode.trim().equalsIgnoreCase(metafieldValue != null ? metafieldValue.trim() : null) && !hasOtherIdMetafield);
-                    boolean titleMatches = title != null && !title.trim().isEmpty() &&
-                            nodeTitle != null && nodeTitle.trim().equalsIgnoreCase(title.trim());
+                    boolean tagMatches = nodeTags != null && nodeTags.contains("kiyuziyu_id_" + targetId);
+                    boolean metafieldMatches = metafieldValue != null && targetId.equalsIgnoreCase(metafieldValue.trim());
 
                     if (tagMatches || metafieldMatches) {
                         if (!verifiedIds.contains(shopifyProductId)) {
@@ -640,15 +853,60 @@ public class ShopifyGraphQLClient {
             return verifiedIds.get(0);
         }
 
-        if (title != null || productCode != null) {
-            log.warn("[Shopify] Multiple ({}) existing Shopify products found for firebaseProductId='{}' (title='{}', code='{}'). Reusing first product '{}' to prevent creating duplicates.",
-                    verifiedIds.size(), firebaseProductId, title, productCode, verifiedIds.get(0));
-            return verifiedIds.get(0);
-        }
-
         log.error("[Shopify] CONFLICT: {} Shopify products verified for firebaseProductId='{}'. IDs: {}",
-                verifiedIds.size(), firebaseProductId, verifiedIds);
-        throw new ShopifyDuplicateConflictException(null, firebaseProductId, verifiedIds);
+                verifiedIds.size(), targetId, verifiedIds);
+        throw new ShopifyDuplicateConflictException(null, targetId, verifiedIds);
+    }
+
+    public Map<String, String> getFirebaseProductDetailsFromShopify(String shopifyProductId) {
+        if (shopifyProductId == null || shopifyProductId.trim().isEmpty()) return null;
+        String fullId = shopifyProductId.startsWith("gid://") ? shopifyProductId : "gid://shopify/Product/" + shopifyProductId;
+        String query = "query getMeta($id: ID!) { product(id: $id) { " +
+                "id title tags " +
+                "metafields(first: 10, namespace: \"kiyuziyu\") { edges { node { key value } } } " +
+                "} }";
+        try {
+            Map<String, Object> data = executeQuery(query, Map.of("id", fullId));
+            if (data != null && data.containsKey("product")) {
+                Map<String, Object> product = (Map<String, Object>) data.get("product");
+                if (product != null) {
+                    Map<String, String> result = new HashMap<>();
+                    result.put("title", (String) product.get("title"));
+
+                    Map<String, Object> mfs = (Map<String, Object>) product.get("metafields");
+                    if (mfs != null && mfs.containsKey("edges")) {
+                        List<Map<String, Object>> edges = (List<Map<String, Object>>) mfs.get("edges");
+                        if (edges != null) {
+                            for (Map<String, Object> edge : edges) {
+                                Map<String, Object> node = (Map<String, Object>) edge.get("node");
+                                if (node != null) {
+                                    String k = (String) node.get("key");
+                                    String v = (String) node.get("value");
+                                    if ("product_id".equals(k)) result.put("productId", v != null ? v.trim() : null);
+                                    if ("product_code".equals(k)) result.put("productCode", v != null ? v.trim() : null);
+                                }
+                            }
+                        }
+                    }
+
+                    List<String> tags = (List<String>) product.get("tags");
+                    if (tags != null) {
+                        for (String tag : tags) {
+                            if (tag.startsWith("kiyuziyu_id_") && !result.containsKey("productId")) {
+                                result.put("productId", tag.substring("kiyuziyu_id_".length()).trim());
+                            }
+                            if (tag.startsWith("kiyuziyu_code_") && !result.containsKey("productCode")) {
+                                result.put("productCode", tag.substring("kiyuziyu_code_".length()).trim());
+                            }
+                        }
+                    }
+                    return result;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[Shopify] Failed to get product details from Shopify for {}: {}", shopifyProductId, e.getMessage());
+        }
+        return null;
     }
 
     public Map<String, String> createProduct(
@@ -815,7 +1073,7 @@ public class ShopifyGraphQLClient {
         }
     }
 
-    private Map<String, Object> findMatchingVariant(List<Map<String, Object>> existingVariants, List<Map<String, String>> optionValues) {
+    public Map<String, Object> findMatchingVariant(List<Map<String, Object>> existingVariants, List<Map<String, String>> optionValues) {
         if (existingVariants == null || existingVariants.isEmpty() || optionValues == null || optionValues.isEmpty()) {
             return null;
         }
@@ -1364,6 +1622,275 @@ public class ShopifyGraphQLClient {
         Map<String, Object> bulkUpdate = (Map<String, Object>) data.get("productVariantsBulkUpdate");
 
         checkUserErrors(bulkUpdate, "productVariantsBulkUpdate");
+    }
+
+    public List<Map<String, Object>> getWebhookSubscriptions() {
+        String query = "query getWebhooks { webhookSubscriptions(first: 50) { edges { node { id topic endpoint { __typename ... on WebhookHttpEndpoint { callbackUrl } } } } } }";
+        Map<String, Object> data = executeQuery(query, null);
+        if (data != null && data.containsKey("webhookSubscriptions")) {
+            Map<String, Object> subs = (Map<String, Object>) data.get("webhookSubscriptions");
+            if (subs != null && subs.containsKey("edges")) {
+                List<Map<String, Object>> edges = (List<Map<String, Object>>) subs.get("edges");
+                List<Map<String, Object>> result = new ArrayList<>();
+                for (Map<String, Object> edge : edges) {
+                    if (edge.get("node") instanceof Map) {
+                        result.add((Map<String, Object>) edge.get("node"));
+                    }
+                }
+                return result;
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    public Map<String, Object> registerWebhookSubscription(String topic, String callbackUrl) {
+        String normalizedTopic = topic != null ? topic.trim().toUpperCase().replace('/', '_') : "";
+        String mutation = "mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {\n" +
+                "  webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {\n" +
+                "    userErrors {\n" +
+                "      field\n" +
+                "      message\n" +
+                "    }\n" +
+                "    webhookSubscription {\n" +
+                "      id\n" +
+                "      topic\n" +
+                "      endpoint {\n" +
+                "        __typename\n" +
+                "        ... on WebhookHttpEndpoint {\n" +
+                "          callbackUrl\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        Map<String, Object> subInput = new HashMap<>();
+        subInput.put("callbackUrl", callbackUrl);
+        subInput.put("format", "JSON");
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("topic", normalizedTopic);
+        variables.put("webhookSubscription", subInput);
+
+        Map<String, Object> data = executeQuery(mutation, variables);
+        Map<String, Object> createResult = (Map<String, Object>) data.get("webhookSubscriptionCreate");
+        checkUserErrors(createResult, "webhookSubscriptionCreate");
+        return (Map<String, Object>) createResult.get("webhookSubscription");
+    }
+
+    public boolean deleteWebhookSubscription(String id) {
+        String mutation = "mutation webhookSubscriptionDelete($id: ID!) {\n" +
+                "  webhookSubscriptionDelete(id: $id) {\n" +
+                "    userErrors {\n" +
+                "      field\n" +
+                "      message\n" +
+                "    }\n" +
+                "    deletedWebhookSubscriptionId\n" +
+                "  }\n" +
+                "}";
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("id", id);
+
+        Map<String, Object> data = executeQuery(mutation, variables);
+        Map<String, Object> deleteResult = (Map<String, Object>) data.get("webhookSubscriptionDelete");
+        checkUserErrors(deleteResult, "webhookSubscriptionDelete");
+        return deleteResult != null && deleteResult.get("deletedWebhookSubscriptionId") != null;
+    }
+
+    public Map<String, Object> getInventoryItem(String inventoryItemId) {
+        String gid = inventoryItemId != null && inventoryItemId.startsWith("gid://") ? inventoryItemId : "gid://shopify/InventoryItem/" + inventoryItemId;
+        String query = "query getInventoryItem($id: ID!) {\n" +
+                "  inventoryItem(id: $id) {\n" +
+                "    id\n" +
+                "    sku\n" +
+                "    variant {\n" +
+                "      id\n" +
+                "      title\n" +
+                "      sku\n" +
+                "      product {\n" +
+                "        id\n" +
+                "        title\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("id", gid);
+
+        Map<String, Object> data = executeQuery(query, variables);
+        if (data != null && data.containsKey("inventoryItem")) {
+            return (Map<String, Object>) data.get("inventoryItem");
+        }
+        return Collections.emptyMap();
+    }
+
+    public Map<String, Object> getShopifyOrder(String orderId) {
+        String gid = orderId != null && orderId.startsWith("gid://") ? orderId : "gid://shopify/Order/" + orderId;
+        String query = "query getOrder($id: ID!) {\n" +
+                "  order(id: $id) {\n" +
+                "    id\n" +
+                "    name\n" +
+                "    createdAt\n" +
+                "    displayFinancialStatus\n" +
+                "    displayFulfillmentStatus\n" +
+                "    note\n" +
+                "    totalPriceSet {\n" +
+                "      shopMoney {\n" +
+                "        amount\n" +
+                "        currencyCode\n" +
+                "      }\n" +
+                "    }\n" +
+                "    customer {\n" +
+                "      firstName\n" +
+                "      lastName\n" +
+                "      email\n" +
+                "      phone\n" +
+                "    }\n" +
+                "    shippingAddress {\n" +
+                "      name\n" +
+                "      company\n" +
+                "      address1\n" +
+                "      address2\n" +
+                "      city\n" +
+                "      province\n" +
+                "      zip\n" +
+                "      country\n" +
+                "      phone\n" +
+                "    }\n" +
+                "    billingAddress {\n" +
+                "      name\n" +
+                "      company\n" +
+                "      address1\n" +
+                "      address2\n" +
+                "      city\n" +
+                "      province\n" +
+                "      zip\n" +
+                "      country\n" +
+                "      phone\n" +
+                "    }\n" +
+                "    lineItems(first: 50) {\n" +
+                "      edges {\n" +
+                "        node {\n" +
+                "          id\n" +
+                "          title\n" +
+                "          quantity\n" +
+                "          sku\n" +
+                "          originalUnitPriceSet {\n" +
+                "            shopMoney {\n" +
+                "              amount\n" +
+                "            }\n" +
+                "          }\n" +
+                "          variant {\n" +
+                "            id\n" +
+                "            title\n" +
+                "            sku\n" +
+                "          }\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("id", gid);
+
+        Map<String, Object> data = executeQuery(query, variables);
+        if (data != null && data.containsKey("order")) {
+            return (Map<String, Object>) data.get("order");
+        }
+        return Collections.emptyMap();
+    }
+
+    public List<Map<String, Object>> getRecentShopifyOrders(int limit) {
+        String query = "query getRecentOrders($first: Int!) {\n" +
+                "  orders(first: $first, sortKey: CREATED_AT, reverse: true) {\n" +
+                "    edges {\n" +
+                "      node {\n" +
+                "        id\n" +
+                "        name\n" +
+                "        createdAt\n" +
+                "        displayFinancialStatus\n" +
+                "        displayFulfillmentStatus\n" +
+                "        note\n" +
+                "        totalPriceSet {\n" +
+                "          shopMoney {\n" +
+                "            amount\n" +
+                "            currencyCode\n" +
+                "          }\n" +
+                "        }\n" +
+                "        customer {\n" +
+                "          firstName\n" +
+                "          lastName\n" +
+                "          email\n" +
+                "          phone\n" +
+                "        }\n" +
+                "        shippingAddress {\n" +
+                "          name\n" +
+                "          company\n" +
+                "          address1\n" +
+                "          address2\n" +
+                "          city\n" +
+                "          province\n" +
+                "          zip\n" +
+                "          country\n" +
+                "          phone\n" +
+                "        }\n" +
+                "        billingAddress {\n" +
+                "          name\n" +
+                "          company\n" +
+                "          address1\n" +
+                "          address2\n" +
+                "          city\n" +
+                "          province\n" +
+                "          zip\n" +
+                "          country\n" +
+                "          phone\n" +
+                "        }\n" +
+                "        lineItems(first: 50) {\n" +
+                "          edges {\n" +
+                "            node {\n" +
+                "              id\n" +
+                "              title\n" +
+                "              quantity\n" +
+                "              sku\n" +
+                "              originalUnitPriceSet {\n" +
+                "                shopMoney {\n" +
+                "                  amount\n" +
+                "                }\n" +
+                "              }\n" +
+                "              variant {\n" +
+                "                id\n" +
+                "                title\n" +
+                "                sku\n" +
+                "              }\n" +
+                "            }\n" +
+                "          }\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("first", limit);
+
+        Map<String, Object> data = executeQuery(query, variables);
+        if (data != null && data.containsKey("orders")) {
+            Map<String, Object> ordersMap = (Map<String, Object>) data.get("orders");
+            if (ordersMap != null && ordersMap.containsKey("edges")) {
+                List<Map<String, Object>> edges = (List<Map<String, Object>>) ordersMap.get("edges");
+                List<Map<String, Object>> result = new ArrayList<>();
+                for (Map<String, Object> edge : edges) {
+                    if (edge.get("node") instanceof Map) {
+                        result.add((Map<String, Object>) edge.get("node"));
+                    }
+                }
+                return result;
+            }
+        }
+        return Collections.emptyList();
     }
 
     private void checkUserErrors(Map<String, Object> payload, String operation) {

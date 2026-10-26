@@ -1,16 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../../firebase';
+import { auth, db } from '../../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { getUserSession, adminSignOut, getIdToken, API_BASE, apiFetch } from './adminAuth';
 import LogoImage from '../../assets/logoj2.png';
 import TenantOrders from './TenantOrders';
+import TenantAnalysisReports from './TenantAnalysisReports';
 
-export default function TenantDashboard() {
+export default function TenantDashboard({ initialTab = 'dashboard' }) {
   const [user, setUser] = useState(null);
   const [tenantProfile, setTenantProfile] = useState(null);
+  const tenantProfileRef = useRef(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(initialTab || 'dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Shopify Connection State
@@ -20,6 +23,7 @@ export default function TenantDashboard() {
   const [shopifyError, setShopifyError] = useState('');
   const [shopifySuccess, setShopifySuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [authorizing, setAuthorizing] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
 
@@ -36,37 +40,62 @@ export default function TenantDashboard() {
     }
   };
 
-  // Fetch Shopify Connection for current tenant
-  const fetchShopifyConnection = useCallback(async () => {
+  // Fetch Shopify Connection for current tenant with direct Firestore fallback
+  const fetchShopifyConnection = useCallback(async (explicitTenantId) => {
     setShopifyLoading(true);
     setShopifyError('');
+    const targetTenantId = explicitTenantId || tenantProfileRef.current?.tenantId;
+
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         headers: { 
           'Authorization': `Bearer ${token}`
         },
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.data) {
+        if (data.success && data.data && data.data.status === 'CONNECTED') {
           setShopifyConn(data.data);
-        } else {
+          setShopifyLoading(false);
+          return;
+        } else if (data.success && !data.data) {
           setShopifyConn(null);
         }
-      } else if (res.status === 404) {
-        setShopifyConn(null);
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        setShopifyError(errData.message || 'Failed to load Shopify connection details.');
       }
     } catch (err) {
-      console.error('Error fetching shopify connection:', err);
-      // Silently set no connection if server error or offline
-      setShopifyConn(null);
-    } finally {
-      setShopifyLoading(false);
+      console.warn('Backend API connection fetch warning:', err);
     }
+
+    // Direct Firestore check fallback
+    if (targetTenantId) {
+      try {
+        const q = query(collection(db, 'apiShopifyConnections'), where('tenantId', '==', targetTenantId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const connData = snap.docs[0].data();
+          if (connData && connData.status === 'CONNECTED') {
+            setShopifyConn({
+              connectionId: snap.docs[0].id,
+              tenantId: connData.tenantId,
+              storeId: connData.storeId,
+              shopifyStoreDomain: connData.shopifyStoreDomain,
+              shopifyStoreId: connData.shopifyStoreId,
+              status: connData.status,
+              connectedAt: connData.connectedAt,
+              updatedAt: connData.updatedAt,
+              hasAccessToken: !!(connData.accessToken && connData.accessToken.trim())
+            });
+            setShopifyLoading(false);
+            return;
+          }
+        }
+      } catch (fsErr) {
+        // Ignored if client rules restrict direct read
+      }
+    }
+
+    setShopifyLoading(false);
   }, []);
 
   // Handle query params on redirect back
@@ -80,49 +109,95 @@ export default function TenantDashboard() {
       setActiveTab('orders');
     } else if (tabParam === 'account') {
       setActiveTab('account');
+    } else if (tabParam === 'reports') {
+      setActiveTab('reports');
+    } else if (initialTab && initialTab !== 'dashboard') {
+      setActiveTab(initialTab);
     }
     if (shopifyParam === 'connected') {
-      setShopifySuccess('Shopify store connected successfully!');
+      setShopifySuccess('Shopify store successfully authorized via OAuth! Access token acquired.');
       // clear param from url without reloading
       window.history.replaceState({}, document.title, window.location.pathname + '?tab=shopify');
     } else if (shopifyParam === 'error') {
-      setShopifyError('Failed to connect Shopify store or authorization was cancelled.');
+      const errMsg = params.get('message') || 'Failed to connect Shopify store or authorization was cancelled.';
+      setShopifyError('Shopify OAuth Error: ' + errMsg);
       window.history.replaceState({}, document.title, window.location.pathname + '?tab=shopify');
     }
   }, []);
 
-  // Protected route check
+  // Protected route check and real-time shopify connection subscription
   useEffect(() => {
+    let isMounted = true;
+    let unsubConn = null;
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
-        navigate('/admin/login', { replace: true });
+        if (isMounted) navigate('/admin/login', { replace: true });
         return;
       }
-      setUser(currentUser);
+      if (isMounted) setUser(currentUser);
       try {
         const session = await getUserSession(currentUser.uid);
         if (!session) {
-          navigate('/admin/login', { replace: true });
+          if (isMounted) navigate('/admin/login', { replace: true });
           return;
         }
 
         // If user is an Admin, cross-redirect to /admin/dashboard
         if (session.type === 'ADMIN') {
-          navigate('/admin/dashboard', { replace: true });
+          if (isMounted) navigate('/admin/dashboard', { replace: true });
           return;
         }
 
-        setTenantProfile(session.profile);
-        fetchShopifyConnection();
+        tenantProfileRef.current = session.profile;
+        if (isMounted) setTenantProfile(session.profile);
+        const tId = session.profile?.tenantId;
+        fetchShopifyConnection(tId);
+
+        // Real-time listener on apiShopifyConnections for this tenant (if accessible)
+        if (tId) {
+          try {
+            unsubConn = onSnapshot(query(collection(db, 'apiShopifyConnections'), where('tenantId', '==', tId)), (snap) => {
+              if (!snap.empty && isMounted) {
+                const connDoc = snap.docs[0];
+                const connData = connDoc.data();
+                if (connData && connData.status === 'CONNECTED') {
+                  setShopifyConn({
+                    connectionId: connDoc.id,
+                    tenantId: connData.tenantId,
+                    storeId: connData.storeId,
+                    shopifyStoreDomain: connData.shopifyStoreDomain,
+                    shopifyStoreId: connData.shopifyStoreId,
+                    status: connData.status,
+                    connectedAt: connData.connectedAt,
+                    updatedAt: connData.updatedAt,
+                    hasAccessToken: !!(connData.accessToken && connData.accessToken.trim())
+                  });
+                  setShopifyLoading(false);
+                } else if (connData && connData.status === 'DISCONNECTED') {
+                  setShopifyConn(null);
+                }
+              }
+            }, (snapshotErr) => {
+              console.warn('Real-time connection listener notice:', snapshotErr?.message || snapshotErr);
+            });
+          } catch (e) {
+            console.warn('Could not establish onSnapshot for connections:', e);
+          }
+        }
       } catch (err) {
         console.error('Error verifying tenant session:', err);
-        navigate('/admin/login', { replace: true });
+        if (isMounted) navigate('/admin/login', { replace: true });
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     });
-    return () => unsub();
-  }, [navigate, fetchShopifyConnection]);
+
+    return () => {
+      isMounted = false;
+      unsub();
+      if (unsubConn) unsubConn();
+    };
+  }, [navigate]);
 
   const handleLogout = async () => {
     try {
@@ -133,10 +208,10 @@ export default function TenantDashboard() {
     }
   };
 
-  // Domain Normalization & Validation
+  // Domain Normalization & Validation (handles raw names, https, and admin.shopify.com urls)
   const validateAndNormalizeDomain = (inputDomain) => {
     if (!inputDomain || !inputDomain.trim()) {
-      return { valid: false, message: 'Please enter a valid Shopify store domain.' };
+      return { valid: false, message: 'Please enter your Shopify store URL or domain.' };
     }
     let clean = inputDomain.trim().toLowerCase();
     // Strip http:// or https://
@@ -144,48 +219,63 @@ export default function TenantDashboard() {
     // Strip trailing slash or path components
     clean = clean.replace(/\/.*$/, '');
 
+    // Handle admin.shopify.com/store/xyz
+    if (clean.includes('admin.shopify.com/store/')) {
+      const match = clean.match(/admin\.shopify\.com\/store\/([a-zA-Z0-9-]+)/);
+      if (match && match[1]) clean = match[1] + '.myshopify.com';
+    }
+
+    // Auto append .myshopify.com if single word entered
+    if (!clean.includes('.')) {
+      clean = clean + '.myshopify.com';
+    }
+
     const shopifyDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
     if (!shopifyDomainRegex.test(clean)) {
-      return { valid: false, message: 'Please enter a valid Shopify store domain.' };
+      return { valid: false, message: 'Please enter a valid Shopify store domain (e.g. your-store.myshopify.com).' };
     }
     return { valid: true, domain: clean };
   };
 
-  // Handle Connect Shopify submit
-  const handleConnectShopify = async (e) => {
-    e.preventDefault();
-    setShopifyError('');
-    setShopifySuccess('');
-
-    const validation = validateAndNormalizeDomain(shopifyDomain);
+  // Start Shopify OAuth Flow
+  const handleStartOAuth = async (explicitDomain) => {
+    const rawDomain = explicitDomain || shopifyDomain || shopifyConn?.shopifyStoreDomain;
+    const validation = validateAndNormalizeDomain(rawDomain);
     if (!validation.valid) {
       setShopifyError(validation.message);
       return;
     }
 
     try {
-      setSubmitting(true);
+      setAuthorizing(true);
+      setShopifyError('');
+      setShopifySuccess('');
       const token = await getIdToken();
-      
-      const res = await fetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${validation.domain}`, {
-        method: 'GET',
+      const origin = window.location.origin;
+      const res = await apiFetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${encodeURIComponent(validation.domain)}&origin=${encodeURIComponent(origin)}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success && data.authUrl) {
+        // Redirect browser to Shopify's official OAuth authorization screen
         window.location.href = data.authUrl;
       } else {
-        setShopifyError(data.message || 'Failed to start Shopify authorization.');
-        setSubmitting(false);
+        setShopifyError(data.message || 'Failed to initiate Shopify OAuth authorization.');
+        setAuthorizing(false);
       }
     } catch (err) {
-      console.error('Error starting shopify oauth:', err);
-      setShopifyError('Network error. Failed to start Shopify connection.');
-      setSubmitting(false);
+      console.error('Error starting Shopify OAuth:', err);
+      setShopifyError('Network error starting Shopify authorization.');
+      setAuthorizing(false);
     }
+  };
+
+  // Handle Connect Shopify submit (Form trigger)
+  const handleConnectShopify = async (e) => {
+    e.preventDefault();
+    handleStartOAuth(shopifyDomain);
   };
 
   // Handle Disconnect Shopify
@@ -197,7 +287,7 @@ export default function TenantDashboard() {
 
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/tenants/me/shopify-connection`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -225,6 +315,12 @@ export default function TenantDashboard() {
     }
   };
 
+  useEffect(() => {
+    if (shopifyConn?.shopifyStoreDomain && !shopifyDomain) {
+      setShopifyDomain(shopifyConn.shopifyStoreDomain);
+    }
+  }, [shopifyConn, shopifyDomain]);
+
   if (loading) {
     return (
       <div style={s.loadingPage}>
@@ -241,11 +337,12 @@ export default function TenantDashboard() {
   const userEmail = tenantProfile?.email || user?.email || '—';
   const userName = tenantProfile?.name || 'Store Tenant';
 
-  const isConnected = shopifyConn && shopifyConn.status === 'CONNECTED';
-  const shopifyStatusText = shopifyConn?.status || 'NOT_CONNECTED';
+  const isConnected = !!(shopifyConn && shopifyConn.status === 'CONNECTED' && shopifyConn.hasAccessToken === true);
+  const shopifyStatusText = isConnected ? 'CONNECTED' : (shopifyConn?.status || 'NOT_CONNECTED');
 
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'grid', functional: true, path: '/tenant/dashboard' },
+    { id: 'reports', label: 'Analysis Reports', icon: 'bar-chart', functional: true, path: '/tenant/dashboard?tab=reports' },
     { id: 'orders', label: 'Orders', icon: 'shopping-cart', functional: true, path: '/tenant/dashboard?tab=orders' },
     { id: 'shopify', label: 'Shopify Store', icon: 'shopping-bag', functional: true, path: '/tenant/dashboard?tab=shopify' },
     { id: 'account', label: 'Account', icon: 'user', functional: true, path: '/tenant/dashboard?tab=account' },
@@ -436,7 +533,7 @@ export default function TenantDashboard() {
             <div>
               <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b', fontWeight: '700', letterSpacing: '0.04em' }}>Linked Shopify Domain</span>
               <div style={{ fontSize: '13.5px', color: '#0f172a', fontWeight: '600', marginTop: '2px', wordBreak: 'break-all' }}>
-                {shopifyConn?.shopDomain || 'No Shopify store linked'}
+                {shopifyConn?.shopifyStoreDomain || shopifyConn?.shopDomain || 'No Shopify store linked'}
               </div>
             </div>
             <div>
@@ -608,6 +705,7 @@ export default function TenantDashboard() {
                 const domain = shopifyConn?.shopifyStoreDomain;
                 if (domain) window.open(`https://${domain}/admin`, '_blank');
               }}
+              type="button"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0f172a" strokeWidth="2">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -618,9 +716,23 @@ export default function TenantDashboard() {
             </button>
 
             <button
+              style={s.manageBtn}
+              onClick={() => handleStartOAuth(shopifyConn?.shopifyStoreDomain)}
+              disabled={authorizing}
+              type="button"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0f172a" strokeWidth="2">
+                <path d="M1 4v6h6" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
+              <span>{authorizing ? 'Connecting...' : 'Reconnect Store'}</span>
+            </button>
+
+            <button
               style={s.disconnectBtn}
               onClick={() => setShowDisconnectConfirm(true)}
               disabled={submitting}
+              type="button"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -642,17 +754,19 @@ export default function TenantDashboard() {
                 value={shopifyDomain}
                 onChange={(e) => setShopifyDomain(e.target.value)}
                 style={s.input}
-                disabled={submitting}
+                disabled={submitting || authorizing}
               />
             </div>
             <span style={s.hintText}>Example: example.myshopify.com or https://example.myshopify.com/</span>
           </div>
 
-
-
           <div style={s.formGroupRow}>
-            <button type="submit" style={s.connectBtn} disabled={submitting}>
-              {submitting ? (
+            <button
+              type="submit"
+              style={s.connectBtn}
+              disabled={submitting || authorizing}
+            >
+              {authorizing ? (
                 <>
                   <div style={s.btnSpinner} />
                   <span>Connecting...</span>
@@ -829,10 +943,12 @@ export default function TenantDashboard() {
               </button>
               <div>
                 <h1 style={s.pageTitle}>
-                  {activeTab === 'shopify' ? 'Shopify Integration' : activeTab === 'orders' ? 'Store Orders' : activeTab === 'account' ? 'My Account' : 'Tenant Dashboard'}
+                  {activeTab === 'shopify' ? 'Shopify Integration' : activeTab === 'orders' ? 'Store Orders' : activeTab === 'reports' ? 'Analysis Reports' : activeTab === 'account' ? 'My Account' : 'Tenant Dashboard'}
                 </h1>
                 <p style={s.pageSubtitle}>
-                  {activeTab === 'account'
+                  {activeTab === 'reports'
+                    ? 'Review real-time sales reports, daily collections, admin payable balances, and activity logs.'
+                    : activeTab === 'account'
                     ? 'View your store account profile, tenant identifier, Shopify connection, and credentials.'
                     : <>Welcome back, <strong>{userName}</strong>. Manage your store tenant settings and API configurations.</>}
                 </p>
@@ -976,7 +1092,17 @@ export default function TenantDashboard() {
           {/* ORDERS TAB VIEW */}
           {activeTab === 'orders' && (
             <div style={{ padding: '20px 0' }}>
-              <TenantOrders tenantId={user?.uid} isAdmin={false} />
+              <TenantOrders tenantId={tenantProfile?.tenantId || user?.uid} isAdmin={false} />
+            </div>
+          )}
+
+          {/* ANALYSIS REPORTS TAB VIEW */}
+          {activeTab === 'reports' && (
+            <div style={{ padding: '4px 0' }}>
+              <TenantAnalysisReports
+                tenantId={tenantProfile?.tenantId || user?.uid}
+                tenantProfile={tenantProfile}
+              />
             </div>
           )}
 
@@ -1087,6 +1213,14 @@ function renderIcon(iconType, isActive) {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7" r="4" />
+        </svg>
+      );
+    case 'bar-chart':
+      return (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="20" x2="12" y2="10" />
+          <line x1="18" y1="20" x2="18" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="16" />
         </svg>
       );
     default:

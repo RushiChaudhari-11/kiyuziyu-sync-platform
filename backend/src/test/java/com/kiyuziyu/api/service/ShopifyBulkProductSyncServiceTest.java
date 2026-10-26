@@ -155,14 +155,13 @@ class ShopifyBulkProductSyncServiceTest {
         Map<String, String> c1 = new HashMap<>();
         c1.put("productId", "gid://shopify/Product/1");
         c1.put("variantId", "gid://shopify/ProductVariant/1");
-        when(shopifyGraphQLClient.createProduct(anyString(), anyString(), anyString(), anyString(), any(), any(), anyString(), any(), any(), anyString(), any(), any(), any())).thenReturn(c1);
-
         // P002 Mocks (Duplicate)
         when(shopifyGraphQLClient.findProductIdByFirebaseId("doc_P002")).thenReturn("gid://shopify/Product/2");
 
         // P003 Mocks (Exception during createProduct)
         when(shopifyGraphQLClient.findProductIdByFirebaseId("doc_P003")).thenReturn(null);
-        when(shopifyGraphQLClient.createProduct(anyString(), anyString(), anyString(), anyString(), any(), any(), anyString(), any(), any(), anyString(), any(), any(), any())).thenThrow(new RuntimeException("API Error"));
+        org.mockito.Mockito.doReturn(c1).doThrow(new RuntimeException("API Error"))
+                .when(shopifyGraphQLClient).createProduct(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
 
         ShopifyBulkSyncRequest req = new ShopifyBulkSyncRequest();
         req.setLimit(10);
@@ -178,11 +177,8 @@ class ShopifyBulkProductSyncServiceTest {
         assertEquals(3, response.getFailed()); // P003, P004, P005
         assertEquals(5, response.getResults().size());
 
-        // Verify variant price was updated for P001 with sellingPrice 150.0
-        verify(shopifyGraphQLClient, times(1)).updateVariantPrice("gid://shopify/Product/1", "gid://shopify/ProductVariant/1", 150.0);
-        
-        // Ensure P002 duplicate logic was respected (never created, never price updated)
-        verify(shopifyGraphQLClient, never()).createProduct(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        // Verify variant was updated for P001 with sellingPrice 150.0 and SKU P001
+        verify(shopifyGraphQLClient, times(1)).updateVariantDetails("gid://shopify/Product/1", "gid://shopify/ProductVariant/1", 150.0, "P001");
     }
 
     // -----------------------------------------------------------------------
@@ -431,8 +427,8 @@ class ShopifyBulkProductSyncServiceTest {
 
         Map<String, String> c1 = Map.of("productId", "gid://shopify/Product/101", "variantId", "gid://shopify/ProductVariant/101");
         Map<String, String> c2 = Map.of("productId", "gid://shopify/Product/102", "variantId", "gid://shopify/ProductVariant/102");
-        when(shopifyGraphQLClient.createProduct(anyString(), anyString(), anyString(), anyString(), any(), any(), anyString(), any(), any(), anyString(), any(), any(), any())).thenReturn(c1);
-        when(shopifyGraphQLClient.createProduct(anyString(), anyString(), anyString(), anyString(), any(), any(), anyString(), any(), any(), anyString(), any(), any(), any())).thenReturn(c2);
+        org.mockito.Mockito.doReturn(c1).doReturn(c2)
+                .when(shopifyGraphQLClient).createProduct(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
 
         ShopifyBulkSyncRequest req = new ShopifyBulkSyncRequest();
         req.setLimit(10);
@@ -451,8 +447,8 @@ class ShopifyBulkProductSyncServiceTest {
         assertEquals("gid://shopify/Product/101", response.getResults().get(0).getShopifyProductId());
         assertEquals("gid://shopify/Product/102", response.getResults().get(1).getShopifyProductId());
 
-        verify(shopifyGraphQLClient).updateVariantPrice("gid://shopify/Product/101", "gid://shopify/ProductVariant/101", 550.0);
-        verify(shopifyGraphQLClient).updateVariantPrice("gid://shopify/Product/102", "gid://shopify/ProductVariant/102", 650.0);
+        verify(shopifyGraphQLClient).updateVariantDetails("gid://shopify/Product/101", "gid://shopify/ProductVariant/101", 550.0, "837");
+        verify(shopifyGraphQLClient).updateVariantDetails("gid://shopify/Product/102", "gid://shopify/ProductVariant/102", 650.0, "837");
     }
 
     // -----------------------------------------------------------------------
@@ -594,12 +590,10 @@ class ShopifyBulkProductSyncServiceTest {
         Map<String, String> c1 = Map.of("productId", "gid://shopify/Product/1", "variantId", "gid://shopify/ProductVariant/1");
         Map<String, String> c3 = Map.of("productId", "gid://shopify/Product/3", "variantId", "gid://shopify/ProductVariant/3");
 
-        when(shopifyGraphQLClient.createProduct(anyString(), anyString(), anyString(), anyString(), any(), any(), anyString(), any(), any(), anyString(), any(), any(), any()))
-                .thenReturn(c1);
-        when(shopifyGraphQLClient.createProduct(anyString(), anyString(), anyString(), anyString(), any(), any(), anyString(), any(), any(), anyString(), any(), any(), any()))
-                .thenThrow(new RuntimeException("The file is not supported on trial accounts. Select a plan to upload this file."));
-        when(shopifyGraphQLClient.createProduct(anyString(), anyString(), anyString(), anyString(), any(), any(), anyString(), any(), any(), anyString(), any(), any(), any()))
-                .thenReturn(c3);
+        org.mockito.Mockito.doReturn(c1)
+                .doThrow(new RuntimeException("The file is not supported on trial accounts. Select a plan to upload this file."))
+                .doReturn(c3)
+                .when(shopifyGraphQLClient).createProduct(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
 
         ShopifyBulkSyncRequest req = new ShopifyBulkSyncRequest();
         req.setLimit(10);

@@ -30,6 +30,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -56,6 +64,37 @@ public class AdminTenantService {
     private ApiCredentialRepository apiCredentialRepository;
 
     /**
+     * Safely parse a date-time string (ISO-8601, ISO_OFFSET_DATE_TIME, LocalDateTime YYYY-MM-DDTHH:mm, or LocalDate).
+     */
+    public static Instant parseDateStringToInstant(String str, String fieldName) {
+        if (str == null || str.trim().isEmpty()) {
+            return null;
+        }
+        String s = str.trim();
+        try {
+            return Instant.parse(s);
+        } catch (DateTimeParseException e1) {
+            try {
+                return ZonedDateTime.parse(s).toInstant();
+            } catch (DateTimeParseException e2) {
+                try {
+                    return LocalDateTime.parse(s, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                            .atZone(ZoneId.systemDefault())
+                            .toInstant();
+                } catch (DateTimeParseException e3) {
+                    try {
+                        return LocalDate.parse(s)
+                                .atStartOfDay(ZoneId.systemDefault())
+                                .toInstant();
+                    } catch (DateTimeParseException e4) {
+                        throw new BadRequestException("Invalid " + fieldName + " format: " + s + ". Expected ISO-8601 or YYYY-MM-DDTHH:mm");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Verify that the authenticated Firebase user has an active SUPER_ADMIN profile.
      */
     public void verifySuperAdmin(FirebaseToken token) throws ExecutionException, InterruptedException {
@@ -77,9 +116,25 @@ public class AdminTenantService {
         if (request == null) {
             throw new BadRequestException("Request body is required");
         }
-        if (request.getName() == null || request.getName().trim().isEmpty()) {
-            throw new BadRequestException("Tenant name is required");
+
+        String businessName = request.getBusinessName() != null ? request.getBusinessName().trim() : null;
+        String fullName = request.getFullName() != null ? request.getFullName().trim() : null;
+        String legacyName = request.getName() != null ? request.getName().trim() : null;
+
+        if (businessName == null || businessName.isEmpty()) {
+            businessName = legacyName;
         }
+        if (fullName == null || fullName.isEmpty()) {
+            fullName = legacyName;
+        }
+
+        if (businessName == null || businessName.isEmpty()) {
+            throw new BadRequestException("Business name is required");
+        }
+        if (fullName == null || fullName.isEmpty()) {
+            throw new BadRequestException("Full name is required");
+        }
+
         if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
             throw new BadRequestException("Email address is required");
         }
@@ -92,12 +147,62 @@ public class AdminTenantService {
             throw new BadRequestException("Invalid role. Allowed roles: OWNER, STORE_MANAGER, STAFF");
         }
 
-        String email = request.getEmail().trim();
-        String name = request.getName().trim();
+        // Subscription Type validation (1 - Monthly, 2 - Yearly)
+        String subType = request.getSubscriptionType();
+        if (subType == null || subType.trim().isEmpty()) {
+            subType = "MONTHLY";
+        } else {
+            String norm = subType.trim().toUpperCase();
+            if (norm.contains("YEAR") || norm.equals("2")) {
+                subType = "YEARLY";
+            } else if (norm.contains("MONTH") || norm.equals("1")) {
+                subType = "MONTHLY";
+            } else {
+                throw new BadRequestException("Invalid subscription type: " + subType + ". Allowed: MONTHLY (1-Monthly) or YEARLY (2-Yearly)");
+            }
+        }
 
-        // 1. Generate tenantId and unique tenant code
+        // Amount validation
+        Double amount = request.getSubscriptionAmount();
+        if (amount != null && amount < 0) {
+            throw new BadRequestException("Subscription amount cannot be negative");
+        }
+
+        // Global Date-Time Validation
+        Timestamp startTimestamp = null;
+        Timestamp endTimestamp = null;
+
+        if (request.getSubscriptionStartDate() != null && !request.getSubscriptionStartDate().trim().isEmpty()) {
+            Instant startInstant = parseDateStringToInstant(request.getSubscriptionStartDate().trim(), "Start Date");
+            startTimestamp = Timestamp.ofTimeSecondsAndNanos(startInstant.getEpochSecond(), startInstant.getNano());
+        } else {
+            startTimestamp = Timestamp.now();
+        }
+
+        if (request.getSubscriptionEndDate() != null && !request.getSubscriptionEndDate().trim().isEmpty()) {
+            Instant endInstant = parseDateStringToInstant(request.getSubscriptionEndDate().trim(), "End Date");
+            endTimestamp = Timestamp.ofTimeSecondsAndNanos(endInstant.getEpochSecond(), endInstant.getNano());
+        } else {
+            // Auto-calculate end date based on subscription type
+            ZonedDateTime zdt = ZonedDateTime.now(ZoneOffset.UTC);
+            if ("YEARLY".equals(subType)) {
+                zdt = zdt.plusYears(1);
+            } else {
+                zdt = zdt.plusMonths(1);
+            }
+            endTimestamp = Timestamp.ofTimeSecondsAndNanos(zdt.toInstant().getEpochSecond(), zdt.toInstant().getNano());
+        }
+
+        // Global rule: End date must be strictly after start date
+        if (endTimestamp.compareTo(startTimestamp) <= 0) {
+            throw new BadRequestException("Subscription end date must be strictly after start date");
+        }
+
+        String email = request.getEmail().trim();
+
+        // 1. Generate tenantId and unique tenant code based on business name
         String tenantId = "tenant_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        String baseCode = name.toUpperCase().replaceAll("[^A-Z0-9]", "");
+        String baseCode = businessName.toUpperCase().replaceAll("[^A-Z0-9]", "");
         if (baseCode.length() < 3) baseCode = "TN" + baseCode;
         if (baseCode.length() > 12) baseCode = baseCode.substring(0, 12);
 
@@ -109,32 +214,39 @@ public class AdminTenantService {
 
         String firebaseUid = null;
         try {
-            // 2. Create Firebase Authentication User via Admin SDK
+            // 2. Create Firebase Authentication User via Admin SDK (with owner's full name)
             UserRecord.CreateRequest createReq = new UserRecord.CreateRequest()
                     .setEmail(email)
                     .setPassword(request.getPassword())
-                    .setDisplayName(name);
+                    .setDisplayName(fullName);
             UserRecord userRecord = FirebaseAuth.getInstance().createUser(createReq);
             firebaseUid = userRecord.getUid();
-            log.info("[AdminTenantService] Created Firebase Auth User: UID={}, Email={}", firebaseUid, email);
+            log.info("[AdminTenantService] Created Firebase Auth User: UID={}, Email={}, Name={}", firebaseUid, email, fullName);
 
             // 3. Create Tenant Document
             Tenant tenant = new Tenant();
             tenant.setTenantId(tenantId);
-            tenant.setName(name);
+            tenant.setName(businessName);
+            tenant.setBusinessName(businessName);
+            tenant.setFullName(fullName);
             tenant.setCode(tenantCode);
             tenant.setStatus(TenantStatus.ACTIVE.name());
             tenant.setOwnerUserId(firebaseUid);
+            tenant.setSubscriptionType(subType);
+            tenant.setSubscriptionStartDate(startTimestamp);
+            tenant.setSubscriptionEndDate(endTimestamp);
+            tenant.setSubscriptionAmount(amount);
             tenant.setCreatedAt(Timestamp.now());
             tenant.setUpdatedAt(Timestamp.now());
             tenantRepository.save(tenant);
-            log.info("[AdminTenantService] Created apiTenants record: id={}, code={}, ownerUserId={}", tenantId, tenantCode, firebaseUid);
+            log.info("[AdminTenantService] Created apiTenants record: id={}, code={}, business={}, owner={}, sub={}",
+                    tenantId, tenantCode, businessName, fullName, subType);
 
             // 4. Create ApiUser Document
             ApiUser apiUser = new ApiUser();
             apiUser.setUid(firebaseUid);
             apiUser.setEmail(email);
-            apiUser.setName(name);
+            apiUser.setName(fullName);
             apiUser.setRole(roleStr);
             apiUser.setStatus(UserStatus.ACTIVE.name());
             apiUser.setTenantId(tenantId);
@@ -147,7 +259,7 @@ public class AdminTenantService {
             String createdClientId = null;
             String generatedApiKey = null;
             if (Boolean.TRUE.equals(request.getCreateApiClient())) {
-                ApiClient client = apiClientService.createClient(name, null);
+                ApiClient client = apiClientService.createClient(businessName, null);
                 createdClientId = client.getClientId();
 
                 if (request.getApiKey() != null && !request.getApiKey().trim().isEmpty()) {
@@ -166,11 +278,21 @@ public class AdminTenantService {
 
             AdminCreateTenantResponseData responseData = new AdminCreateTenantResponseData();
             responseData.setTenantId(tenantId);
-            responseData.setName(name);
+            responseData.setName(businessName);
+            responseData.setBusinessName(businessName);
+            responseData.setFullName(fullName);
             responseData.setCode(tenantCode);
             responseData.setEmail(email);
             responseData.setRole(roleStr);
             responseData.setStatus("ACTIVE");
+            responseData.setSubscriptionType(subType);
+            if (startTimestamp != null) {
+                responseData.setSubscriptionStartDate(startTimestamp.toDate().toInstant().toString());
+            }
+            if (endTimestamp != null) {
+                responseData.setSubscriptionEndDate(endTimestamp.toDate().toInstant().toString());
+            }
+            responseData.setSubscriptionAmount(amount);
             responseData.setApiClientId(createdClientId);
             responseData.setApiKey(generatedApiKey);
 
@@ -208,7 +330,21 @@ public class AdminTenantService {
         List<Tenant> tenants = tenantRepository.findAll();
         List<AdminTenantListItem> items = new ArrayList<>();
         for (Tenant t : tenants) {
-            items.add(AdminTenantListItem.from(t));
+            AdminTenantListItem item = AdminTenantListItem.from(t);
+            if (t.getOwnerUserId() != null && !t.getOwnerUserId().trim().isEmpty()) {
+                try {
+                    ApiUser u = apiUserRepository.findById(t.getOwnerUserId().trim());
+                    if (u != null && u.getEmail() != null) {
+                        item.setOwnerEmail(u.getEmail());
+                    }
+                    if (item.getFullName() == null && u != null && u.getName() != null) {
+                        item.setFullName(u.getName());
+                    }
+                } catch (Exception ex) {
+                    log.warn("[AdminTenantService] Failed to load owner user for {}: {}", t.getOwnerUserId(), ex.getMessage());
+                }
+            }
+            items.add(item);
         }
         return items;
     }

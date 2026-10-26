@@ -107,6 +107,7 @@ function AppContent() {
         <Route path="/admin/signup" element={<AdminSignup />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/tenant/dashboard" element={<TenantDashboard />} />
+        <Route path="/tenant/analysis-reports" element={<TenantDashboard initialTab="reports" />} />
         <Route path="/tenant/products" element={<TenantProducts />} />
         <Route path="/Apple@782k" element={<AdminPage />} />
         <Route path="/orders-products" element={<OrdersProductsPage />} />

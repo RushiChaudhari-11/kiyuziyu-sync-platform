@@ -160,10 +160,21 @@ public class TenantProductService {
             }
         }
 
+        // Store error messages from latest job
+        Map<String, String> errorMap = new HashMap<>();
+        for (Map.Entry<String, SyncJob> entry : latestJobPerProduct.entrySet()) {
+            if (entry.getValue().getErrorMessage() != null) {
+                errorMap.put(entry.getKey(), entry.getValue().getErrorMessage());
+            }
+        }
+
         for (Map.Entry<String, String> entry : statusMap.entrySet()) {
             Map<String, Object> map = new HashMap<>();
             map.put("productId", entry.getKey());
             map.put("status", entry.getValue());
+            if (errorMap.containsKey(entry.getKey())) {
+                map.put("errorMessage", errorMap.get(entry.getKey()));
+            }
             result.add(map);
         }
 

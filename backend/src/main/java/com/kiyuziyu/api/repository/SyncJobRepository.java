@@ -59,16 +59,25 @@ public class SyncJobRepository {
         return firestore.runTransaction(transaction -> {
             DocumentSnapshot snap = transaction.get(docRef).get();
             if (!snap.exists()) {
+                log.warn("[SyncJobRepo] claimJobForProcessing doc {} does not exist in Firestore", jobId);
                 return null;
             }
-            SyncJob job = snap.toObject(SyncJob.class);
-            if (job == null || !SyncJobStatus.QUEUED.name().equals(job.getStatus())) {
+            String status = snap.getString("status");
+            if (status == null || !SyncJobStatus.QUEUED.name().equalsIgnoreCase(status.trim())) {
+                log.info("[SyncJobRepo] claimJobForProcessing doc {} cannot be claimed: currentStatus='{}'", jobId, status);
                 return null; // Already claimed or not queued
             }
+            SyncJob job = snap.toObject(SyncJob.class);
+            if (job == null) {
+                job = new SyncJob();
+                job.setJobId(jobId);
+            }
+            String now = java.time.Instant.now().toString();
             job.setStatus(SyncJobStatus.RUNNING.name());
-            job.setStartedAt(java.time.Instant.now().toString());
-            job.setUpdatedAt(java.time.Instant.now().toString());
-            transaction.set(docRef, job);
+            job.setStartedAt(now);
+            job.setUpdatedAt(now);
+
+            transaction.update(docRef, "status", SyncJobStatus.RUNNING.name(), "startedAt", now, "updatedAt", now);
             return job;
         }).get();
     }

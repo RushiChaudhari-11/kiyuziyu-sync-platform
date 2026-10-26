@@ -175,9 +175,11 @@ public class ShopifyBulkProductSyncService {
                     log.info("[ShopifyBulkProductSyncService] SHOPIFY PRODUCT ALREADY EXISTS: Product ID='{}' (code='{}') in Shopify as {}. Updating existing product...",
                             productId, productCode, existingShopifyProductId);
 
+                    String resolvedTitle = ShopifyProductService.resolveProductTitle(product);
+
                     shopifyGraphQLClient.updateProduct(
                             existingShopifyProductId,
-                            product.getProductName(),
+                            resolvedTitle,
                             descriptionHtml,
                             productCode,
                             productId,
@@ -200,38 +202,22 @@ public class ShopifyBulkProductSyncService {
                 }
 
                 // Creation with full product details
-                java.util.Map<String, String> createResult;
-                if (subcollectionName != null || product.getQuantity() != null) {
-                    createResult = shopifyGraphQLClient.createProduct(
-                            product.getProductName(),
-                            descriptionHtml,
-                            productCode,
-                            productId,
-                            basePrice,
-                            customerPrice,
-                            product.getImage(),
-                            product.getImages(),
-                            product.getTags(),
-                            productType,
-                            product.getVariations(),
-                            subcollectionName,
-                            product.getQuantity()
-                    );
-                } else {
-                    createResult = shopifyGraphQLClient.createProduct(
-                            product.getProductName(),
-                            descriptionHtml,
-                            productCode,
-                            productId,
-                            basePrice,
-                            customerPrice,
-                            product.getImage(),
-                            product.getImages(),
-                            product.getTags(),
-                            productType,
-                            product.getVariations()
-                    );
-                }
+                String resolvedTitle = ShopifyProductService.resolveProductTitle(product);
+                java.util.Map<String, String> createResult = shopifyGraphQLClient.createProduct(
+                        resolvedTitle,
+                        descriptionHtml,
+                        productCode,
+                        productId,
+                        basePrice,
+                        customerPrice,
+                        product.getImage(),
+                        product.getImages(),
+                        product.getTags(),
+                        productType,
+                        product.getVariations(),
+                        subcollectionName,
+                        product.getQuantity()
+                );
 
                 String shopifyProductId = createResult.get("productId");
                 String shopifyVariantId = createResult.get("variantId");

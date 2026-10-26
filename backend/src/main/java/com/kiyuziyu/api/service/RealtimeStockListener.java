@@ -3,25 +3,29 @@ package com.kiyuziyu.api.service;
 import com.google.cloud.firestore.DocumentChange;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.QueryDocumentSnapshot;
+import com.kiyuziyu.api.integration.shopify.ShopifyContextHolder;
+import com.kiyuziyu.api.model.Product;
+import com.kiyuziyu.api.model.ShopifyConnection;
 import com.kiyuziyu.api.model.ShopifyProductMapping;
-import com.kiyuziyu.api.model.SyncJob;
-import com.kiyuziyu.api.model.SyncJobStatus;
-import com.kiyuziyu.api.model.SyncJobType;
+import com.kiyuziyu.api.repository.ShopifyConnectionRepository;
 import com.kiyuziyu.api.repository.ShopifyProductMappingRepository;
-import com.kiyuziyu.api.repository.SyncJobRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
-import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class RealtimeStockListener {
 
     private static final Logger log = LoggerFactory.getLogger(RealtimeStockListener.class);
+
+    // Loop suppression cache: key = productId or productCode, value = timestamp millis
+    public static final ConcurrentHashMap<String, Long> loopSuppressionCache = new ConcurrentHashMap<>();
+    private static final long SUPPRESSION_WINDOW_MS = 15000L; // 15 seconds
 
     @Autowired
     private Firestore firestore;
@@ -30,10 +34,33 @@ public class RealtimeStockListener {
     private ShopifyProductMappingRepository mappingRepository;
 
     @Autowired
-    private SyncJobRepository syncJobRepository;
+    private ShopifyConnectionRepository shopifyConnectionRepository;
 
     @Autowired
-    private SyncJobProcessor syncJobProcessor;
+    private ShopifyProductService shopifyProductService;
+
+    /**
+     * Suppress Firestore realtime updates triggered by internal operations (e.g. Shopify Webhooks or Cancel Restores)
+     */
+    public static void suppressLoop(String key) {
+        if (key != null && !key.trim().isEmpty()) {
+            loopSuppressionCache.put(key.trim(), System.currentTimeMillis());
+            log.info("[RealtimeStockListener] Loop suppression activated for key: {}", key.trim());
+        }
+    }
+
+    public static boolean isSuppressed(String key) {
+        if (key == null) return false;
+        Long ts = loopSuppressionCache.get(key.trim());
+        if (ts != null) {
+            if (System.currentTimeMillis() - ts < SUPPRESSION_WINDOW_MS) {
+                return true;
+            } else {
+                loopSuppressionCache.remove(key.trim());
+            }
+        }
+        return false;
+    }
 
     @PostConstruct
     public void initStockListener() {
@@ -61,9 +88,15 @@ public class RealtimeStockListener {
         });
     }
 
-    private void handleProductUpdate(QueryDocumentSnapshot document) throws Exception {
+    public void handleProductUpdate(QueryDocumentSnapshot document) throws Exception {
         String productId = document.getId();
         String productCode = document.getString("productCode");
+
+        // Check if suppressed to prevent infinite loops from webhook order deductions or cancel restores
+        if (isSuppressed(productId) || (productCode != null && isSuppressed(productCode))) {
+            log.info("[RealtimeStockListener] Suppressing echo stock update for productId={}, productCode={}", productId, productCode);
+            return;
+        }
         
         log.info("[RealtimeStockListener] Handling stock update for productId={}, productCode={}", productId, productCode);
 
@@ -75,65 +108,56 @@ public class RealtimeStockListener {
             return;
         }
 
-        log.info("[RealtimeStockListener] Product {} (code={}) was modified. Triggering sync for {} store targets...",
+        Product product = document.toObject(Product.class);
+        if (product.getId() == null) {
+            product.setId(productId);
+        }
+        if (product.getProductCode() == null) {
+            product.setProductCode(productCode);
+        }
+
+        log.info("[RealtimeStockListener] Product {} (code={}) was modified. Triggering direct inventory sync for {} store targets...",
                 productId, productCode, mappings.size());
 
         for (ShopifyProductMapping mapping : mappings) {
             String tenantId = mapping.getTenantId();
             String storeId = mapping.getStoreId();
             String connectionId = mapping.getConnectionId();
+            String shopifyProductId = mapping.getShopifyProductId();
 
-            if (tenantId == null || storeId == null || connectionId == null) {
+            if (tenantId == null || storeId == null || connectionId == null || shopifyProductId == null) {
                 continue;
             }
 
-            // Check if already queued or running
-            List<SyncJob> activeJobs = syncJobRepository.findActiveJobsForStore(tenantId, storeId);
-            boolean alreadyQueued = activeJobs.stream()
-                    .anyMatch(j -> j.getProductIds() != null && (j.getProductIds().contains(productId) || (productCode != null && j.getProductIds().contains(productCode))));
-
-            if (alreadyQueued) {
-                log.info("[RealtimeStockListener] Sync already active/queued for tenant {}, store {}, product {}", tenantId, storeId, productId);
-                continue;
+            try {
+                ShopifyConnection connection = shopifyConnectionRepository.findById(connectionId);
+                if (connection != null && connection.getShopifyStoreDomain() != null) {
+                    ShopifyContextHolder.setContext(connection.getShopifyStoreDomain());
+                    boolean success = shopifyProductService.syncInventoryOnly(tenantId, shopifyProductId, product);
+                    if (success) {
+                        log.info("[RealtimeStockListener] Successfully synced real-time inventory to Shopify store {} for product {}",
+                                connection.getShopifyStoreDomain(), productId);
+                    } else {
+                        log.warn("[RealtimeStockListener] Inventory sync returned false for store {} and product {}",
+                                connection.getShopifyStoreDomain(), productId);
+                    }
+                } else {
+                    log.warn("[RealtimeStockListener] ShopifyConnection {} not found or missing domain", connectionId);
+                }
+            } catch (Exception ex) {
+                log.error("[RealtimeStockListener] Failed direct inventory sync for product {} on store {}: {}",
+                        productId, storeId, ex.getMessage(), ex);
+            } finally {
+                ShopifyContextHolder.clearContext();
             }
-
-            // Queue a new sync job
-            String jobId = "job_auto_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-            String now = Instant.now().toString();
-
-            List<String> pIds = Collections.singletonList(productId);
-
-            SyncJob job = new SyncJob(
-                    jobId,
-                    tenantId,
-                    storeId,
-                    connectionId,
-                    SyncJobType.PRODUCT_SYNC.name(),
-                    SyncJobStatus.QUEUED.name(),
-                    pIds,
-                    1,
-                    0,
-                    0,
-                    0,
-                    null,
-                    null,
-                    null,
-                    now,
-                    now
-            );
-
-            syncJobRepository.save(job);
-            log.info("[RealtimeStockListener] Saved auto-sync job {} for tenant {}, product {}. Executing async...", jobId, tenantId, productId);
-            
-            // Execute directly via async executor without waiting for another listener
-            syncJobProcessor.processJobAsync(jobId, tenantId, storeId, connectionId, pIds);
         }
     }
 
     private List<ShopifyProductMapping> getMappingsForProduct(String productId, String productCode) {
         List<ShopifyProductMapping> list = new ArrayList<>();
         try {
-            // 1. Query by exact productId (documentId)
+            // Strictly query by exact productId (Firestore documentId) to prevent cross-contamination
+            // across distinct product documents that share the same productCode.
             var snap1 = firestore.collection(ShopifyProductMappingRepository.COLLECTION_NAME)
                     .whereEqualTo("productId", productId)
                     .get().get();
@@ -142,19 +166,6 @@ public class RealtimeStockListener {
                 ShopifyProductMapping m = doc.toObject(ShopifyProductMapping.class);
                 if (m != null && isMappedStatus(m.getStatus())) {
                     list.add(m);
-                }
-            }
-
-            // 2. Query by productCode if available and distinct
-            if (productCode != null && !productCode.trim().isEmpty() && !productCode.trim().equals(productId)) {
-                var snap2 = firestore.collection(ShopifyProductMappingRepository.COLLECTION_NAME)
-                        .whereEqualTo("productCode", productCode.trim())
-                        .get().get();
-                for (var doc : snap2.getDocuments()) {
-                    ShopifyProductMapping m = doc.toObject(ShopifyProductMapping.class);
-                    if (m != null && isMappedStatus(m.getStatus()) && list.stream().noneMatch(x -> x.getMappingId() != null && x.getMappingId().equals(m.getMappingId()))) {
-                        list.add(m);
-                    }
                 }
             }
         } catch (Exception e) {

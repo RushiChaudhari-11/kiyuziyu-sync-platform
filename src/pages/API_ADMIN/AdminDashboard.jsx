@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../../firebase';
+import { auth, db } from '../../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { getUserSession, adminSignOut, getIdToken, API_BASE } from './adminAuth';
+import { collection, getDocs, onSnapshot } from 'firebase/firestore';
+import { getUserSession, adminSignOut, getIdToken, API_BASE, apiFetch } from './adminAuth';
 import LogoImage from '../../assets/logoj2.png';
 import TenantOrders from './TenantOrders';
+import AdminAnalysisReports from './AdminAnalysisReports';
 import { ROLE_CONFIG } from '../../config/roles';
+import {
+  formatLocalDateTimeForInput,
+  calculateSubscriptionEndDate,
+  validateDateTimeRange,
+  formatDisplayDateTime,
+  toUtcIsoString
+} from '../../utils/dateTimeValidation';
 
 export default function AdminDashboard() {
   const [user, setUser] = useState(null);
@@ -21,10 +30,16 @@ export default function AdminDashboard() {
 
   // Create Tenant Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [businessName, setBusinessName] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState(Object.keys(ROLE_CONFIG)[0]);
+  const [subscriptionType, setSubscriptionType] = useState('MONTHLY');
+  const [subscriptionStartDate, setSubscriptionStartDate] = useState('');
+  const [subscriptionEndDate, setSubscriptionEndDate] = useState('');
+  const [subscriptionAmount, setSubscriptionAmount] = useState('999');
+  const [dateRangeError, setDateRangeError] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyNotice, setApiKeyNotice] = useState('');
@@ -45,17 +60,92 @@ export default function AdminDashboard() {
     }
   };
 
+  // Check URL query parameters for active tab
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'reports') {
+      setActiveTab('reports');
+    } else if (tabParam === 'orders') {
+      setActiveTab('orders');
+    } else if (tabParam === 'tenants') {
+      setActiveTab('tenants');
+    } else if (tabParam === 'account') {
+      setActiveTab('account');
+    }
+  }, []);
+
   const fetchTenants = async () => {
     setLoadingTenants(true);
     try {
-      const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/admin/tenants`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // 1. Direct Firestore fetch to guarantee immediate display
+      const usersSnap = await getDocs(collection(db, 'apiUsers'));
+      const userMap = {};
+      usersSnap.forEach((d) => {
+        userMap[d.id] = d.data();
       });
-      if (res.ok) {
-        const json = await res.json();
-        setTenants(json.data || []);
-        setTotalCount(json.totalCount !== undefined ? json.totalCount : (json.data?.length || 0));
+
+      const tenantsSnap = await getDocs(collection(db, 'apiTenants'));
+      const list = tenantsSnap.docs.map((docSnap) => {
+        const data = docSnap.data();
+        const owner = userMap[data.ownerUserId] || {};
+        const createdDate = data.createdAt?.toDate 
+          ? data.createdAt.toDate().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+          : (data.createdAt ? String(data.createdAt).substring(0, 10) : '—');
+        return {
+          id: docSnap.id,
+          tenantId: docSnap.id,
+          name: data.businessName || data.name || owner.name || 'Tenant',
+          businessName: data.businessName || data.name || 'Tenant',
+          fullName: data.fullName || owner.name || '—',
+          code: data.code || '—',
+          ownerUserId: data.ownerUserId,
+          ownerEmail: owner.email || data.ownerEmail || '—',
+          status: data.status || 'ACTIVE',
+          subscriptionType: data.subscriptionType || 'MONTHLY',
+          subscriptionStartDate: data.subscriptionStartDate?.toDate ? data.subscriptionStartDate.toDate().toISOString() : data.subscriptionStartDate,
+          subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate().toISOString() : data.subscriptionEndDate,
+          subscriptionAmount: data.subscriptionAmount != null ? data.subscriptionAmount : (data.amount != null ? data.amount : null),
+          createdAt: createdDate
+        };
+      });
+
+      if (list.length > 0) {
+        setTenants(list);
+        setTotalCount(list.length);
+      }
+
+      // 2. Also query backend API if token is valid
+      try {
+        const token = await getIdToken();
+        const res = await apiFetch(`${API_BASE}/api/v1/admin/tenants`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data && json.data.length > 0) {
+            const apiMapped = json.data.map(item => ({
+              id: item.tenantId || item.id,
+              tenantId: item.tenantId || item.id,
+              name: item.businessName || item.name || 'Tenant',
+              businessName: item.businessName || item.name || 'Tenant',
+              fullName: item.fullName || userMap[item.ownerUserId]?.name || '—',
+              code: item.code || '—',
+              ownerUserId: item.ownerUserId,
+              ownerEmail: item.ownerEmail || userMap[item.ownerUserId]?.email || '—',
+              status: item.status || 'ACTIVE',
+              subscriptionType: item.subscriptionType || 'MONTHLY',
+              subscriptionStartDate: item.subscriptionStartDate,
+              subscriptionEndDate: item.subscriptionEndDate,
+              subscriptionAmount: item.subscriptionAmount != null ? item.subscriptionAmount : item.amount,
+              createdAt: item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+            }));
+            setTenants(apiMapped);
+            setTotalCount(json.totalCount !== undefined ? json.totalCount : apiMapped.length);
+          }
+        }
+      } catch (apiErr) {
+        console.warn('Backend API fetch optional warning:', apiErr.message);
       }
     } catch (err) {
       console.error('Error fetching tenant list:', err);
@@ -64,8 +154,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // Load Auth & Profile
+  // Load Auth & Profile with Real-time Tenants Subscription
   useEffect(() => {
+    let unsubTenants = null;
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
         navigate('/admin/login', { replace: true });
@@ -89,6 +180,46 @@ export default function AdminDashboard() {
 
         if (session.profile.role === 'SUPER_ADMIN' || session.profile.role === 'ADMIN') {
           fetchTenants();
+
+          // Real-time listener on apiTenants collection
+          unsubTenants = onSnapshot(collection(db, 'apiTenants'), async (snap) => {
+            try {
+              const usersSnap = await getDocs(collection(db, 'apiUsers'));
+              const userMap = {};
+              usersSnap.forEach((d) => {
+                userMap[d.id] = d.data();
+              });
+
+              const list = snap.docs.map((docSnap) => {
+                const data = docSnap.data();
+                const owner = userMap[data.ownerUserId] || {};
+                const createdDate = data.createdAt?.toDate 
+                  ? data.createdAt.toDate().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+                  : (data.createdAt ? String(data.createdAt).substring(0, 10) : '—');
+                return {
+                  id: docSnap.id,
+                  tenantId: docSnap.id,
+                  name: data.businessName || data.name || owner.name || 'Tenant',
+                  businessName: data.businessName || data.name || 'Tenant',
+                  fullName: data.fullName || owner.name || '—',
+                  code: data.code || '—',
+                  ownerUserId: data.ownerUserId,
+                  ownerEmail: owner.email || data.ownerEmail || '—',
+                  status: data.status || 'ACTIVE',
+                  subscriptionType: data.subscriptionType || 'MONTHLY',
+                  subscriptionStartDate: data.subscriptionStartDate?.toDate ? data.subscriptionStartDate.toDate().toISOString() : data.subscriptionStartDate,
+                  subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate().toISOString() : data.subscriptionEndDate,
+                  subscriptionAmount: data.subscriptionAmount != null ? data.subscriptionAmount : (data.amount != null ? data.amount : null),
+                  createdAt: createdDate
+                };
+              });
+
+              setTenants(list);
+              setTotalCount(list.length);
+            } catch (snapErr) {
+              console.warn('Real-time tenant snapshot processing error:', snapErr);
+            }
+          });
         }
       } catch (err) {
         console.error('Error fetching admin profile:', err);
@@ -97,7 +228,11 @@ export default function AdminDashboard() {
         setLoading(false);
       }
     });
-    return () => unsub();
+
+    return () => {
+      unsub();
+      if (unsubTenants) unsubTenants();
+    };
   }, [navigate]);
 
   const handleLogout = async () => {
@@ -109,6 +244,60 @@ export default function AdminDashboard() {
     }
   };
 
+  const openCreateTenantModal = () => {
+    const nowStr = formatLocalDateTimeForInput(new Date());
+    setBusinessName('');
+    setFullName('');
+    setEmail('');
+    setPassword('');
+    setRole(Object.keys(ROLE_CONFIG)[0]);
+    setSubscriptionType('MONTHLY');
+    setSubscriptionStartDate(nowStr);
+    setSubscriptionEndDate(calculateSubscriptionEndDate(nowStr, 'MONTHLY'));
+    setSubscriptionAmount('999');
+    setApiKey('');
+    setShowApiKey(false);
+    setDateRangeError('');
+    setApiKeyNotice('');
+    setFormNotice('');
+    setIsModalOpen(true);
+  };
+
+  const handleSubscriptionTypeChange = (e) => {
+    const newType = e.target.value;
+    setSubscriptionType(newType);
+    const newEnd = calculateSubscriptionEndDate(subscriptionStartDate || new Date(), newType);
+    setSubscriptionEndDate(newEnd);
+    if (newType === 'YEARLY' && (subscriptionAmount === '999' || !subscriptionAmount)) {
+      setSubscriptionAmount('9999');
+    } else if (newType === 'MONTHLY' && (subscriptionAmount === '9999' || !subscriptionAmount)) {
+      setSubscriptionAmount('999');
+    }
+    const val = validateDateTimeRange(subscriptionStartDate, newEnd);
+    setDateRangeError(val.isValid ? '' : val.error);
+  };
+
+  const handleStartDateChange = (e) => {
+    const val = e.target.value;
+    setSubscriptionStartDate(val);
+    const check = validateDateTimeRange(val, subscriptionEndDate);
+    setDateRangeError(check.isValid ? '' : check.error);
+  };
+
+  const handleEndDateChange = (e) => {
+    const val = e.target.value;
+    setSubscriptionEndDate(val);
+    const check = validateDateTimeRange(subscriptionStartDate, val);
+    setDateRangeError(check.isValid ? '' : check.error);
+  };
+
+  const handleAutoCalculateEndDate = () => {
+    const newEnd = calculateSubscriptionEndDate(subscriptionStartDate || new Date(), subscriptionType);
+    setSubscriptionEndDate(newEnd);
+    const check = validateDateTimeRange(subscriptionStartDate, newEnd);
+    setDateRangeError(check.isValid ? '' : check.error);
+  };
+
   const handleGenerateApiKey = () => {
     setApiKeyNotice('API key will be generated securely by the backend during tenant creation.');
   };
@@ -116,20 +305,50 @@ export default function AdminDashboard() {
   const handleCreateTenantSubmit = async (e) => {
     e.preventDefault();
     setFormNotice('');
+
+    // Global Date & Time Range Validation
+    const dateValidation = validateDateTimeRange(subscriptionStartDate, subscriptionEndDate);
+    if (!dateValidation.isValid) {
+      setDateRangeError(dateValidation.error);
+      setFormNotice(dateValidation.error);
+      return;
+    }
+
+    if (!businessName.trim()) {
+      setFormNotice('Business / Store Name is required');
+      return;
+    }
+    if (!fullName.trim()) {
+      setFormNotice('Full Name is required');
+      return;
+    }
+
+    const amtNum = subscriptionAmount !== '' ? Number(subscriptionAmount) : 0;
+    if (isNaN(amtNum) || amtNum < 0) {
+      setFormNotice('Subscription amount must be a valid positive number');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const token = await getIdToken();
-      const res = await fetch(`${API_BASE}/api/v1/admin/tenants`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/admin/tenants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name: fullName.trim(),
+          businessName: businessName.trim(),
+          fullName: fullName.trim(),
+          name: businessName.trim(),
           email: email.trim(),
           password: password,
           role: role,
+          subscriptionType: subscriptionType,
+          subscriptionStartDate: toUtcIsoString(subscriptionStartDate),
+          subscriptionEndDate: toUtcIsoString(subscriptionEndDate),
+          subscriptionAmount: amtNum,
           createApiClient: true,
           apiKey: apiKey.trim() || null,
         }),
@@ -137,6 +356,7 @@ export default function AdminDashboard() {
       const json = await res.json();
       if (res.ok && json.success) {
         setIsModalOpen(false);
+        setBusinessName('');
         setFullName('');
         setEmail('');
         setPassword('');
@@ -284,6 +504,21 @@ export default function AdminDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveTab('reports')}
+            style={{
+              ...s.navItem,
+              ...(activeTab === 'reports' ? s.navItemActive : {}),
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="20" x2="12" y2="10" />
+              <line x1="18" y1="20" x2="18" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="16" />
+            </svg>
+            Analysis Reports
+          </button>
+
+          <button
             onClick={() => setActiveTab('orders')}
             style={{
               ...s.navItem,
@@ -377,13 +612,19 @@ export default function AdminDashboard() {
               <span>{sidebarOpen ? 'Hide Menu' : 'Open Menu'}</span>
             </button>
             <div>
-              <h1 style={s.headerTitle}>Super Admin Dashboard</h1>
+              <h1 style={s.headerTitle}>
+                {activeTab === 'reports' ? 'Admin Analysis Reports' : activeTab === 'orders' ? 'All Tenant Orders' : activeTab === 'account' ? 'Admin Account' : 'Super Admin Dashboard'}
+              </h1>
               <p style={s.headerSubtitle}>
-                Manage tenants, API access and platform configuration.
+                {activeTab === 'reports'
+                  ? 'Platform-wide analytics, tenant revenue breakdowns, payment settlements, and top purchased products.'
+                  : activeTab === 'orders'
+                  ? 'Manage and track live customer orders across all active platform tenants.'
+                  : 'Manage tenants, API access and platform configuration.'}
               </p>
             </div>
           </div>
-          <button onClick={() => setIsModalOpen(true)} style={s.primaryBtn}>
+          <button onClick={openCreateTenantModal} style={s.primaryBtn}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
@@ -408,9 +649,9 @@ export default function AdminDashboard() {
                 </svg>
               </div>
             </div>
-            <div style={s.summaryValue}>{totalCount !== null ? totalCount : '—'}</div>
+            <div style={s.summaryValue}>{totalCount !== null ? totalCount : tenants.length}</div>
             <p style={s.summaryNote}>
-              {totalCount !== null ? 'Active registered platform tenants.' : 'Tenant management API will be connected next.'}
+              {tenants.length > 0 ? `${tenants.length} active registered platform tenants.` : 'Active registered platform tenants.'}
             </p>
           </div>
         </section>
@@ -434,7 +675,7 @@ export default function AdminDashboard() {
               <p style={s.emptySub}>
                 Tenant management API will be connected in the next phase.
               </p>
-              <button onClick={() => setIsModalOpen(true)} style={s.secondaryBtn}>
+              <button onClick={openCreateTenantModal} style={s.secondaryBtn}>
                 Create Tenant
               </button>
             </div>
@@ -444,30 +685,77 @@ export default function AdminDashboard() {
                 <thead>
                   <tr>
                     <th style={s.th}>Tenant ID</th>
-                    <th style={s.th}>Tenant Name</th>
+                    <th style={s.th}>Business & Contact</th>
                     <th style={s.th}>Tenant Code</th>
-                    <th style={s.th}>Owner</th>
+                    <th style={s.th}>Subscription</th>
+                    <th style={s.th}>Validity Period</th>
                     <th style={s.th}>Status</th>
-                    <th style={s.th}>Created At</th>
                     <th style={s.th}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {tenants.map((t, i) => (
-                    <tr key={t.id || i} style={s.tr}>
-                      <td style={s.td}>{t.id}</td>
-                      <td style={s.td}>{t.name}</td>
-                      <td style={s.td}>{t.code}</td>
-                      <td style={s.td}>{t.ownerEmail}</td>
-                      <td style={s.td}>
-                        <span style={s.statusActive}>{t.status || 'ACTIVE'}</span>
-                      </td>
-                      <td style={s.td}>{t.createdAt || '—'}</td>
-                      <td style={s.td}>
-                        <span style={s.actionDisabled}>Coming Soon</span>
-                      </td>
-                    </tr>
-                  ))}
+                  {tenants.map((t, i) => {
+                    const isYearly = t.subscriptionType === 'YEARLY';
+                    return (
+                      <tr key={t.tenantId || t.id || i} style={s.tr}>
+                        <td style={s.td}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: '600', color: '#1e293b', fontSize: '13px' }}>
+                            {t.tenantId || t.id}
+                          </span>
+                        </td>
+                        <td style={s.td}>
+                          <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '13.5px' }}>
+                            {t.businessName || t.name}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                            {t.fullName ? t.fullName : ''} {t.ownerEmail || t.email ? `• ${t.ownerEmail || t.email}` : ''}
+                          </div>
+                        </td>
+                        <td style={s.td}>
+                          <span style={{ background: '#f1f5f9', padding: '3px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '11.5px', fontWeight: '700', color: '#334155', letterSpacing: '0.02em' }}>
+                            {t.code}
+                          </span>
+                        </td>
+                        <td style={s.td}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              width: 'fit-content',
+                              backgroundColor: isYearly ? '#eff6ff' : '#f0fdf4',
+                              color: isYearly ? '#2563eb' : '#16a34a',
+                              border: `1px solid ${isYearly ? '#bfdbfe' : '#bbf7d0'}`
+                            }}>
+                              {isYearly ? 'Yearly' : 'Monthly'}
+                            </span>
+                            {t.subscriptionAmount != null && (
+                              <span style={{ fontSize: '12px', fontWeight: '700', color: '#0f172a' }}>
+                                ₹{Number(t.subscriptionAmount).toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={s.td}>
+                          <div style={{ fontSize: '12px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span>{formatDisplayDateTime(t.subscriptionStartDate || t.createdAt)}</span>
+                            <span style={{ color: '#94a3b8', fontSize: '10.5px' }}>to</span>
+                            <span style={{ fontWeight: '600' }}>
+                              {t.subscriptionEndDate ? formatDisplayDateTime(t.subscriptionEndDate) : '—'}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={s.td}>
+                          <span style={s.statusActive}>{t.status || 'ACTIVE'}</span>
+                        </td>
+                        <td style={s.td}>
+                          <span style={{ ...s.statusActive, background: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0', fontSize: '11px', padding: '3px 10px' }}>Connected</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -479,6 +767,12 @@ export default function AdminDashboard() {
         {activeTab === 'orders' && (
           <div style={{ padding: '20px 0', width: '100%' }}>
             <TenantOrders isAdmin={true} tenants={tenants} />
+          </div>
+        )}
+
+        {activeTab === 'reports' && (
+          <div style={{ padding: '10px 0 32px', width: '100%' }}>
+            <AdminAnalysisReports tenants={tenants} />
           </div>
         )}
 
@@ -698,7 +992,7 @@ export default function AdminDashboard() {
             <div style={s.modalHeader}>
               <div>
                 <h2 style={s.modalTitle}>Create New Tenant</h2>
-                <p style={s.modalSub}>Provision a tenant account and API key access.</p>
+                <p style={s.modalSub}>Provision a tenant account, subscription, and API access.</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} style={s.closeBtn}>
                 &times;
@@ -706,44 +1000,135 @@ export default function AdminDashboard() {
             </div>
 
             <form onSubmit={handleCreateTenantSubmit} style={s.form}>
-              {/* Full Name */}
-              <div style={s.field}>
-                <label style={s.label}>Full Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. John Doe"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  style={s.input}
-                />
+              {/* Business Name & Full Name */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                <div style={s.field}>
+                  <label style={s.label}>Business / Store Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Acme Jewelry"
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    style={s.input}
+                  />
+                </div>
+                <div style={s.field}>
+                  <label style={s.label}>Owner Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. John Doe"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    style={s.input}
+                  />
+                </div>
               </div>
 
-              {/* Email */}
-              <div style={s.field}>
-                <label style={s.label}>Email Address</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="owner@store.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={s.input}
-                />
+              {/* Email & Password */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                <div style={s.field}>
+                  <label style={s.label}>Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="owner@store.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={s.input}
+                  />
+                </div>
+                <div style={s.field}>
+                  <label style={s.label}>Password *</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={s.input}
+                  />
+                </div>
               </div>
 
-              {/* Password */}
-              <div style={s.field}>
-                <label style={s.label}>Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={s.input}
-                />
+              {/* Subscription Type & Amount */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                <div style={s.field}>
+                  <label style={s.label}>Subscription Type *</label>
+                  <select
+                    value={subscriptionType}
+                    onChange={handleSubscriptionTypeChange}
+                    style={s.select}
+                  >
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="YEARLY">Yearly</option>
+                  </select>
+                </div>
+                <div style={s.field}>
+                  <label style={s.label}>Subscription Amount (₹) *</label>
+                  <div style={s.inputWrap}>
+                    <span style={{ position: 'absolute', left: '12px', color: '#64748b', fontWeight: '700', fontSize: '14px', zIndex: 1 }}>₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      required
+                      placeholder="e.g. 999"
+                      value={subscriptionAmount}
+                      onChange={(e) => setSubscriptionAmount(e.target.value)}
+                      style={{ ...s.input, paddingLeft: '28px' }}
+                    />
+                  </div>
+                </div>
               </div>
+
+              {/* Start Date & End Date with Global Validation */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                <div style={s.field}>
+                  <div style={s.labelRow}>
+                    <label style={s.label}>Start Date & Time *</label>
+                  </div>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={subscriptionStartDate}
+                    onChange={handleStartDateChange}
+                    style={{ ...s.input, borderColor: dateRangeError ? '#ef4444' : '#cbd5e1' }}
+                  />
+                </div>
+                <div style={s.field}>
+                  <div style={s.labelRow}>
+                    <label style={s.label}>End Date & Time *</label>
+                    <button
+                      type="button"
+                      onClick={handleAutoCalculateEndDate}
+                      style={s.genBtn}
+                      title="Auto calculate end date based on selected subscription type"
+                    >
+                      Auto Set
+                    </button>
+                  </div>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={subscriptionEndDate}
+                    onChange={handleEndDateChange}
+                    style={{ ...s.input, borderColor: dateRangeError ? '#ef4444' : '#cbd5e1' }}
+                  />
+                </div>
+              </div>
+
+              {dateRangeError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#dc2626', fontSize: '12px', fontWeight: '600', padding: '8px 12px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  <span>{dateRangeError}</span>
+                </div>
+              )}
 
               {/* Role Dropdown */}
               <div style={s.field}>
@@ -815,8 +1200,8 @@ export default function AdminDashboard() {
                 >
                   Cancel
                 </button>
-                <button type="submit" style={s.submitBtn}>
-                  Create Tenant
+                <button type="submit" disabled={isSubmitting || !!dateRangeError} style={{ ...s.submitBtn, opacity: (isSubmitting || !!dateRangeError) ? 0.7 : 1 }}>
+                  {isSubmitting ? 'Creating...' : 'Create Tenant'}
                 </button>
               </div>
             </form>
@@ -1378,9 +1763,11 @@ const s = {
     backgroundColor: '#ffffff',
     border: '1px solid #e2e8f0',
     borderRadius: '20px',
-    padding: '32px',
-    maxWidth: '460px',
+    padding: '30px',
+    maxWidth: '560px',
     width: '100%',
+    maxHeight: '92vh',
+    overflowY: 'auto',
     boxShadow: '0 25px 50px -12px rgba(15,23,42,0.18)',
   },
   modalHeader: {

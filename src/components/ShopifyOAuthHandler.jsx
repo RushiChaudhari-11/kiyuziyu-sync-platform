@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getIdToken, API_BASE } from '../pages/API_ADMIN/adminAuth';
+import { getIdToken, API_BASE, apiFetch } from '../pages/API_ADMIN/adminAuth';
 import { auth } from '../firebase';
 
 export default function ShopifyOAuthHandler() {
@@ -38,7 +38,7 @@ export default function ShopifyOAuthHandler() {
           sessionStorage.setItem('shopify_oauth_initiated', cleanShop);
           sessionStorage.removeItem('shopify_pending_shop');
 
-          const response = await fetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${encodeURIComponent(cleanShop)}`, {
+          const response = await apiFetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${encodeURIComponent(cleanShop)}`, {
             headers: { 
               'Authorization': `Bearer ${token}`
             }
@@ -64,7 +64,7 @@ export default function ShopifyOAuthHandler() {
             sessionStorage.setItem('shopify_oauth_initiated', pendingShop);
             sessionStorage.removeItem('shopify_pending_shop');
             
-            const response = await fetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${encodeURIComponent(pendingShop)}`, {
+            const response = await apiFetch(`${API_BASE}/api/v1/shopify/oauth/start?shop=${encodeURIComponent(pendingShop)}`, {
               headers: { 
                 'Authorization': `Bearer ${token}`
               }

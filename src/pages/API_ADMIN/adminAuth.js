@@ -11,12 +11,13 @@ import {
 } from '../../firebase';
 
 /**
- * Get fresh Firebase ID token for currently signed-in user.
+ * Get Firebase ID token for currently signed-in user.
+ * Uses cached token unless forceRefresh is explicitly requested.
  */
-export const getIdToken = async () => {
+export const getIdToken = async (forceRefresh = false) => {
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated.');
-  return user.getIdToken(true);
+  return user.getIdToken(forceRefresh);
 };
 
 /**
@@ -220,8 +221,14 @@ export const friendlyAuthError = (err) => {
   if (code === 'auth/user-not-found' || msg.includes('user-not-found')) {
     return 'Account not found. Please check your email address.';
   }
-  if (code === 'auth/too-many-requests' || msg.includes('too-many-requests')) {
-    return 'Too many failed attempts. Please wait a few minutes and try again.';
+  if (
+    code === 'auth/too-many-requests' ||
+    code === 'auth/quota-exceeded' ||
+    msg.includes('too-many-requests') ||
+    msg.includes('quota-exceeded') ||
+    msg.includes('TOO_MANY_ATTEMPTS')
+  ) {
+    return 'Too many attempts or authentication quota reached. Please wait a moment and try again.';
   }
   if (code === 'auth/email-already-in-use' || msg.includes('email-already-in-use')) {
     return 'Email already registered.';
@@ -244,7 +251,51 @@ export const friendlyAuthError = (err) => {
   return msg || 'Authentication failed. Please try again.';
 };
 
-export const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-  ? 'http://localhost:8080'
-  : 'https://kiyuziyu-api-703805908757.asia-south1.run.app';
+export const CLOUD_RUN_API_BASE = 'https://kiyuziyu-api-703805908757.asia-south1.run.app';
+export const LOCAL_API_BASE = 'http://localhost:8080';
+
+const resolveInitialApiBase = () => {
+  if (typeof window !== 'undefined') {
+    const explicit = window.localStorage?.getItem('API_BASE');
+    if (explicit) return explicit;
+  }
+  if (process.env.REACT_APP_API_BASE) {
+    return process.env.REACT_APP_API_BASE;
+  }
+  // Default to deployed Cloud Run backend so that everything loads seamlessly
+  // without requiring the local Spring Boot backend to be running.
+  return CLOUD_RUN_API_BASE;
+};
+
+export let API_BASE = resolveInitialApiBase();
+
+/**
+ * Transparent fetch wrapper that ensures requests work against either local backend or Cloud Run.
+ * If a request targeting localhost:8080 fails with a network connection error (e.g. backend stopped),
+ * it automatically switches API_BASE to CLOUD_RUN_API_BASE and retries against Cloud Run.
+ */
+export const apiFetch = async (input, init = {}) => {
+  let url = input;
+  if (typeof input === 'string') {
+    if (!input.startsWith('http://') && !input.startsWith('https://')) {
+      const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+      const path = input.startsWith('/') ? input : `/${input}`;
+      url = `${base}${path}`;
+    }
+  }
+
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    const urlStr = typeof url === 'string' ? url : (url?.url || '');
+    if (urlStr.includes('localhost:8080') || urlStr.includes('127.0.0.1:8080')) {
+      console.warn('[apiFetch] Local Spring Boot backend is unreachable. Switching to Cloud Run backend:', CLOUD_RUN_API_BASE);
+      API_BASE = CLOUD_RUN_API_BASE;
+      const fallbackUrl = urlStr.replace(/http:\/\/(localhost|127\.0\.0\.1):8080/, CLOUD_RUN_API_BASE);
+      return await fetch(fallbackUrl, init);
+    }
+    throw err;
+  }
+};
+
 

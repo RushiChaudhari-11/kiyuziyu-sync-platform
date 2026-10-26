@@ -77,7 +77,30 @@ public class GlobalExceptionHandler {
                 .error("[GlobalExceptionHandler] ExecutionException cause: {}", cause.getMessage(), cause);
         Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("success", false);
-        errorResponse.put("message", cause.getMessage() != null ? cause.getMessage() : "Database operation failed");
+
+        String rawMsg = cause.getMessage() != null ? cause.getMessage() : "";
+        if (rawMsg.contains("RESOURCE_EXHAUSTED") || rawMsg.contains("Quota exceeded")) {
+            errorResponse.put("message", "Firebase / Google Cloud Firestore daily quota exceeded. Please upgrade to the Blaze plan (pay-as-you-go) in Firebase Console or check Google Cloud Billing status.");
+            return new ResponseEntity<>(errorResponse, HttpStatus.TOO_MANY_REQUESTS);
+        }
+
+        errorResponse.put("message", rawMsg.isEmpty() ? "Database operation failed" : rawMsg);
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @ExceptionHandler(io.grpc.StatusRuntimeException.class)
+    public ResponseEntity<Map<String, Object>> handleStatusRuntimeException(io.grpc.StatusRuntimeException ex) {
+        org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class)
+                .error("[GlobalExceptionHandler] StatusRuntimeException: {}", ex.getMessage(), ex);
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+
+        if (ex.getStatus().getCode() == io.grpc.Status.Code.RESOURCE_EXHAUSTED || ex.getMessage().contains("Quota exceeded")) {
+            errorResponse.put("message", "Firebase / Google Cloud Firestore daily quota exceeded. Please upgrade to the Blaze plan (pay-as-you-go) in Firebase Console or check Google Cloud Billing status.");
+            return new ResponseEntity<>(errorResponse, HttpStatus.TOO_MANY_REQUESTS);
+        }
+
+        errorResponse.put("message", "Database operation failed: " + ex.getStatus().getDescription());
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
@@ -88,7 +111,12 @@ public class GlobalExceptionHandler {
                 .error("[GlobalExceptionHandler] Unhandled exception: {}", ex.getMessage(), ex);
         Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("success", false);
-        errorResponse.put("message", ex.getMessage() != null ? ex.getMessage() : "An internal error occurred. Please try again.");
+        String rawMsg = ex.getMessage() != null ? ex.getMessage() : "";
+        if (rawMsg.contains("RESOURCE_EXHAUSTED") || rawMsg.contains("Quota exceeded")) {
+            errorResponse.put("message", "Firebase / Google Cloud Firestore daily quota exceeded. Please upgrade to the Blaze plan in Firebase Console or check Google Cloud Billing.");
+            return new ResponseEntity<>(errorResponse, HttpStatus.TOO_MANY_REQUESTS);
+        }
+        errorResponse.put("message", rawMsg.isEmpty() ? "An internal error occurred. Please try again." : rawMsg);
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }

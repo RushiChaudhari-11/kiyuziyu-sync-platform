@@ -55,4 +55,29 @@ public class TenantOrderRepository {
             return false;
         }
     }
+
+    public java.util.List<TenantOrder> findByTenantId(String tenantId) {
+        java.util.List<TenantOrder> list = new java.util.ArrayList<>();
+        if (firestore == null || tenantId == null || tenantId.trim().isEmpty()) {
+            return list;
+        }
+        try {
+            com.google.cloud.firestore.QuerySnapshot snap = firestore.collection(COLLECTION_NAME)
+                    .whereEqualTo("tenantId", tenantId.trim())
+                    .get()
+                    .get();
+            for (com.google.cloud.firestore.QueryDocumentSnapshot doc : snap.getDocuments()) {
+                TenantOrder order = doc.toObject(TenantOrder.class);
+                if (order != null) {
+                    if (order.getOrderId() == null) {
+                        order.setOrderId(doc.getId());
+                    }
+                    list.add(order);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[TenantOrderRepo] Failed to findByTenantId for {}: {}", tenantId, e.getMessage());
+        }
+        return list;
+    }
 }

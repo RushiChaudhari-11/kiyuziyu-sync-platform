@@ -11,11 +11,16 @@ public class ShopifyConnectionResponse {
     private String status;
     private String connectedAt;
     private String updatedAt;
+    private boolean hasAccessToken;
 
     public ShopifyConnectionResponse() {
     }
 
     public ShopifyConnectionResponse(String connectionId, String tenantId, String storeId, String shopifyStoreDomain, String shopifyStoreId, boolean connected, String status, String connectedAt, String updatedAt) {
+        this(connectionId, tenantId, storeId, shopifyStoreDomain, shopifyStoreId, connected, status, connectedAt, updatedAt, false);
+    }
+
+    public ShopifyConnectionResponse(String connectionId, String tenantId, String storeId, String shopifyStoreDomain, String shopifyStoreId, boolean connected, String status, String connectedAt, String updatedAt, boolean hasAccessToken) {
         this.connectionId = connectionId;
         this.tenantId = tenantId;
         this.storeId = storeId;
@@ -25,6 +30,7 @@ public class ShopifyConnectionResponse {
         this.status = status;
         this.connectedAt = connectedAt;
         this.updatedAt = updatedAt;
+        this.hasAccessToken = hasAccessToken;
     }
 
     public String getConnectionId() {
@@ -99,5 +105,13 @@ public class ShopifyConnectionResponse {
 
     public void setUpdatedAt(String updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public boolean isHasAccessToken() {
+        return hasAccessToken;
+    }
+
+    public void setHasAccessToken(boolean hasAccessToken) {
+        this.hasAccessToken = hasAccessToken;
     }
 }

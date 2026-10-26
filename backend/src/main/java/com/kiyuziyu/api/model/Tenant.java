@@ -8,9 +8,15 @@ public class Tenant {
     @DocumentId
     private String tenantId;
     private String name;
+    private String businessName;
+    private String fullName;
     private String code;
     private String status;
     private String ownerUserId;
+    private String subscriptionType; // "MONTHLY", "YEARLY"
+    private Timestamp subscriptionStartDate;
+    private Timestamp subscriptionEndDate;
+    private Double subscriptionAmount;
     private Timestamp createdAt;
     private Timestamp updatedAt;
 
@@ -43,6 +49,22 @@ public class Tenant {
         this.name = name;
     }
 
+    public String getBusinessName() {
+        return businessName;
+    }
+
+    public void setBusinessName(String businessName) {
+        this.businessName = businessName;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
+
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+    }
+
     public String getCode() {
         return code;
     }
@@ -65,6 +87,38 @@ public class Tenant {
 
     public void setOwnerUserId(String ownerUserId) {
         this.ownerUserId = ownerUserId;
+    }
+
+    public String getSubscriptionType() {
+        return subscriptionType;
+    }
+
+    public void setSubscriptionType(String subscriptionType) {
+        this.subscriptionType = subscriptionType;
+    }
+
+    public Timestamp getSubscriptionStartDate() {
+        return subscriptionStartDate;
+    }
+
+    public void setSubscriptionStartDate(Timestamp subscriptionStartDate) {
+        this.subscriptionStartDate = subscriptionStartDate;
+    }
+
+    public Timestamp getSubscriptionEndDate() {
+        return subscriptionEndDate;
+    }
+
+    public void setSubscriptionEndDate(Timestamp subscriptionEndDate) {
+        this.subscriptionEndDate = subscriptionEndDate;
+    }
+
+    public Double getSubscriptionAmount() {
+        return subscriptionAmount;
+    }
+
+    public void setSubscriptionAmount(Double subscriptionAmount) {
+        this.subscriptionAmount = subscriptionAmount;
     }
 
     public Timestamp getCreatedAt() {

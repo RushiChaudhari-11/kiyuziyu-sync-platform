@@ -28,6 +28,8 @@ downloads/
 *.json
 .env
 .env.*
+!.env.example
+!**/.env.example
 
 backend/target/
 shopify-token.txt

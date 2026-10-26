@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
@@ -98,6 +99,48 @@ public class ShopifyProductService {
         // STEP 3 - Pricing Resolution and Validation
         Double basePrice = product.getBasePrice();
         if (basePrice == null || basePrice <= 0) {
+            // Check subcollection tieredPricing
+            if (product.getSubcollectionData() != null && product.getSubcollectionData().containsKey("tieredPricing")) {
+                Object tpObj = product.getSubcollectionData().get("tieredPricing");
+                if (tpObj instanceof Map tp) {
+                    for (String roleKey : new String[]{"retail", "dropshipping", "wholesale", "dealer", "vip", "distributor"}) {
+                        Object listObj = tp.get(roleKey);
+                        if (listObj instanceof List list && !list.isEmpty()) {
+                            Object first = list.get(0);
+                            if (first instanceof Map m && m.containsKey("price")) {
+                                Object pVal = m.get("price");
+                                if (pVal instanceof Number num) basePrice = num.doubleValue();
+                                else if (pVal instanceof String s) {
+                                    try { basePrice = Double.parseDouble(s); } catch (Exception ignored) {}
+                                }
+                                if (basePrice != null && basePrice > 0) break;
+                            }
+                        }
+                    }
+                }
+            }
+            // Check variations for price
+            if ((basePrice == null || basePrice <= 0) && product.getVariations() != null) {
+                for (Map<String, Object> v : product.getVariations()) {
+                    Object pVal = v.get("price");
+                    if (pVal == null) pVal = v.get("sellingPrice");
+                    if (pVal instanceof Number num) basePrice = num.doubleValue();
+                    else if (pVal instanceof String s) {
+                        try { basePrice = Double.parseDouble(s); } catch (Exception ignored) {}
+                    }
+                    if (basePrice != null && basePrice > 0) break;
+                }
+            }
+            // Check purchaseRate fallback
+            if ((basePrice == null || basePrice <= 0) && product.getEffectivePurchaseRate() != null && product.getEffectivePurchaseRate() > 0) {
+                basePrice = product.getEffectivePurchaseRate();
+            }
+            if (basePrice != null && basePrice > 0) {
+                product.setBasePrice(basePrice);
+            }
+        }
+
+        if (basePrice == null || basePrice <= 0) {
             throw new BadRequestException("Firebase product has missing or invalid basePrice.");
         }
 
@@ -170,10 +213,7 @@ public class ShopifyProductService {
         String existingShopifyProductId = knownShopifyProductId;
         if (existingShopifyProductId == null) {
             try {
-                existingShopifyProductId = shopifyGraphQLClient.findProductIdByFirebaseId(productId, product.getProductName(), productCode);
-                if (existingShopifyProductId == null) {
-                    existingShopifyProductId = shopifyGraphQLClient.findProductIdByFirebaseId(productId);
-                }
+                existingShopifyProductId = shopifyGraphQLClient.findProductIdByFirebaseId(productId);
             } catch (ShopifyDuplicateConflictException e) {
                 log.error("[ShopifyProductService] SHOPIFY PRODUCT CONFLICT for productCode: {} (ID: {}). {}", productCode, productId, e.getMessage());
                 Map<String, Object> data = new HashMap<>();
@@ -187,6 +227,8 @@ public class ShopifyProductService {
             }
         }
 
+        String resolvedTitle = resolveProductTitle(product);
+
         if (existingShopifyProductId != null) {
             log.info("[ShopifyProductService] SHOPIFY PRODUCT ALREADY EXISTS: Product {} (ID: {}) in Shopify as {}. Updating...",
                     productCode, productId, existingShopifyProductId);
@@ -196,7 +238,7 @@ public class ShopifyProductService {
 
             shopifyGraphQLClient.updateProduct(
                     existingShopifyProductId,
-                    product.getProductName(),
+                    resolvedTitle,
                     descriptionHtml,
                     productCode,
                     productId,
@@ -233,7 +275,7 @@ public class ShopifyProductService {
 
         // STEP 7 - Create Shopify product with full product information
         Map<String, String> createResult = shopifyGraphQLClient.createProduct(
-                product.getProductName(),
+                resolvedTitle,
                 descriptionHtml,
                 productCode,
                 productId,
@@ -302,5 +344,136 @@ public class ShopifyProductService {
             }
         }
         return stock;
+    }
+
+    /**
+     * Dedicated lightweight stock-only synchronization method.
+     * Updates Shopify inventory levels without altering prices, descriptions, images, or metadata.
+     */
+    public boolean syncInventoryOnly(String tenantId, String shopifyProductId, Product product) {
+        if (shopifyProductId == null || product == null) {
+            log.warn("[ShopifyProductService] Cannot sync inventory: shopifyProductId or product is null");
+            return false;
+        }
+
+        try {
+            String locationId = shopifyGraphQLClient.getActiveLocationId();
+            if (locationId == null) {
+                log.warn("[ShopifyProductService] Active location ID not found for Shopify store. Skipping inventory sync.");
+                return false;
+            }
+
+            var variants = shopifyGraphQLClient.getProductVariants(shopifyProductId);
+            if (variants == null || variants.isEmpty()) {
+                log.warn("[ShopifyProductService] No variants found for Shopify product: {}", shopifyProductId);
+                return false;
+            }
+
+            List<Map<String, Object>> variations = product.getVariations();
+            if (variations != null && !variations.isEmpty()) {
+                // Multi-variant product: match each variation to a Shopify variant
+                int idx = 1;
+                for (Map<String, Object> v : variations) {
+                    Object rawQty = v.get("quantity");
+                    if (rawQty == null && v.containsKey("initialQuantity")) {
+                        rawQty = v.get("initialQuantity");
+                    }
+                    int qty = ShopifyGraphQLClient.parseQuantity(rawQty);
+
+                    // Build expected option values
+                    List<Map<String, String>> optionValues = ShopifyGraphQLClient.buildOptionValues(v, idx);
+                    Map<String, Object> matchedVariant = shopifyGraphQLClient.findMatchingVariant(variants, optionValues);
+
+                    if (matchedVariant == null && idx - 1 < variants.size()) {
+                        // Positional fallback if options match couldn't be resolved
+                        matchedVariant = variants.get(idx - 1);
+                    }
+
+                    if (matchedVariant != null) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> invItem = (Map<String, Object>) matchedVariant.get("inventoryItem");
+                        if (invItem != null && invItem.get("id") != null) {
+                            String invItemId = (String) invItem.get("id");
+                            shopifyGraphQLClient.enableInventoryTracking(invItemId);
+                            shopifyGraphQLClient.activateInventoryAtLocation(invItemId, locationId);
+                            shopifyGraphQLClient.setInventoryQuantity(invItemId, locationId, qty);
+                            log.info("[ShopifyProductService] Inventory updated for variant idx={} (SKU={}-{}): qty={}", idx, product.getProductCode(), idx, qty);
+                        }
+                    }
+                    idx++;
+                }
+            } else {
+                // Standalone product: update the first/single variant
+                int qty = computeEffectiveStock(product);
+                Map<String, Object> firstVariant = variants.get(0);
+                if (firstVariant != null) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> invItem = (Map<String, Object>) firstVariant.get("inventoryItem");
+                    if (invItem != null && invItem.get("id") != null) {
+                        String invItemId = (String) invItem.get("id");
+                        shopifyGraphQLClient.enableInventoryTracking(invItemId);
+                        shopifyGraphQLClient.activateInventoryAtLocation(invItemId, locationId);
+                        shopifyGraphQLClient.setInventoryQuantity(invItemId, locationId, qty);
+                        log.info("[ShopifyProductService] Inventory updated for standalone product {}: qty={}", product.getProductCode(), qty);
+                    }
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("[ShopifyProductService] Failed to sync inventory for product {}: {}", product.getProductCode(), e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Resolves the user-facing product title for Shopify.
+     * When a product document has a single distinctive variant (e.g., color or title/name),
+     * appends the variant to the title so separate products sharing base name and productCode
+     * are clearly distinguished in Shopify (e.g. "M earring - White", "M earring - Green").
+     */
+    public static String resolveProductTitle(Product product) {
+        if (product == null || product.getProductName() == null) {
+            return (product != null && product.getProductCode() != null) ? product.getProductCode() : "";
+        }
+        String baseName = product.getProductName().trim();
+        List<Map<String, Object>> variations = product.getVariations();
+        if (variations != null && variations.size() == 1) {
+            Map<String, Object> singleVar = variations.get(0);
+            String color = singleVar.get("color") != null ? singleVar.get("color").toString().trim() : "";
+            String size = singleVar.get("size") != null ? singleVar.get("size").toString().trim() : "";
+            String name = singleVar.get("name") != null ? singleVar.get("name").toString().trim() : "";
+            if (name.isEmpty() && singleVar.get("title") != null) {
+                name = singleVar.get("title").toString().trim();
+            }
+
+            String varName = null;
+            if (!color.isEmpty() && !size.isEmpty()) {
+                varName = capitalize(color) + " / " + size;
+            } else if (!color.isEmpty()) {
+                varName = capitalize(color);
+            } else if (!size.isEmpty()) {
+                varName = size;
+            } else if (!name.isEmpty()) {
+                varName = capitalize(name);
+            }
+
+            if (varName != null && !varName.isEmpty()) {
+                String lowerVar = varName.toLowerCase();
+                if (!lowerVar.equals("default") && !lowerVar.equals("default title") && !lowerVar.equals("standard")
+                        && !lowerVar.equals("regular") && !lowerVar.equals("none")) {
+                    if (!baseName.toLowerCase().contains(lowerVar)) {
+                        return baseName + " - " + varName;
+                    }
+                }
+            }
+        }
+        return baseName;
+    }
+
+    private static String capitalize(String str) {
+        if (str == null || str.isEmpty()) return str;
+        str = str.trim();
+        if (str.isEmpty()) return str;
+        return Character.toUpperCase(str.charAt(0)) + str.substring(1);
     }
 }
